@@ -34,5 +34,3 @@ Advanced Research Topics (requires pygmo)
   ex9
   ex10
   ex11
-  ex13.ipynb
-
