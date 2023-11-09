@@ -1,12 +1,15 @@
-from pykep.core import epoch, lambert_problem, DAY2SEC, fb_vel, AU
+from pykep.core import epoch, lambert_problem, propagate_lagrangian, DAY2SEC, fb_vel, AU
 from pykep.planet import jpl_lp
+from pykep.trajopt._lambert import lambert_problem_multirev
 
 import numpy as np
+from typing import Any, Dict, List, Tuple
+from bisect import bisect_left
 
 
 class mga:
     r"""
-    This class transcribes a Multiple Gravity Assist (MGA) trajectory with no deep space manouvres into an optimisation problem.
+    This class transcribes a Multiple Gravity Assist (MGA) trajectory with no deep space maneuvers into an optimisation problem.
     It may be used as a User Defined Problem (UDP) for the pygmo (http://esa.github.io/pygmo/) optimisation suite.
 
     - Izzo, Dario. "Global optimization and space pruning for spacecraft trajectory design." Spacecraft Trajectory Optimization 1 (2010): 178-200.
@@ -45,7 +48,8 @@ class mga:
                  tof_encoding='direct',
                  orbit_insertion=False,
                  e_target=None,
-                 rp_target=None
+                 rp_target=None,
+                 max_revs = 0
                  ):
         """mga(seq=[pk.planet.jpl_lp('earth'), pk.planet.jpl_lp('venus'), pk.planet.jpl_lp('earth')], t0=[0, 1000], tof=[100, 500], vinf=2.5, multi_objective=False, alpha_encoding=False, orbit_insertion=False, e_target=None, rp_target=None)
 
@@ -57,11 +61,12 @@ class mga:
               this contains a 2D list with the lower and upper bounds on the time-of-flight. If *tof_encoding*
               is 'eta' tof is a float defining the upper bound on the time-of-flight
             - vinf (``float``): the vinf provided at launch for free
-            - multi_objective (``bool``): when True constructs a multiobjective problem (dv, T). In this case, 'alpha' or `eta` encodings are reccomended
+            - multi_objective (``bool``): when True constructs a multiobjective problem (dv, T). In this case, 'alpha' or `eta` encodings are recommended
             - tof_encoding (``str``): one of 'direct', 'alpha' or 'eta'. Selects the encoding for the time of flights
             - orbit_insertion (``bool``): when True the arrival dv is computed as that required to acquire a target orbit defined by e_target and rp_target
             - e_target (``float``): if orbit_insertion is True this defines the target orbit eccentricity around the final planet
             - rp_target (``float``): if orbit_insertion is True this defines the target orbit pericenter around the final planet (in m)
+            - max_revs (``int``): maximal number of revolutions for lambert transfer
 
         Raises:
             - ValueError: if *planets* do not share the same central body (checked on the mu_central_body attribute)
@@ -80,15 +85,15 @@ class mga:
             if (type(t0[i]) != type(epoch(0))):
                 t0[i] = epoch(t0[i])
         # 3 - Check the tof bounds
-        if tof_encoding is 'alpha':
+        if tof_encoding == 'alpha':
             if len(tof) != 2:
                 raise ValueError(
                     r'When the tof_encoding is \'alpha\', tof is expected to be something like [lb, ub]')
-        elif tof_encoding is 'direct':
+        elif tof_encoding == 'direct':
             if len(tof) != (len(seq) - 1):
                 raise ValueError(
                     'When tof_encoding is direct, the tof must be a float (upper bound on the time of flight)' + str(len(seq) - 1))
-        elif tof_encoding is 'eta':
+        elif tof_encoding == 'eta':
             try:
                 float(tof)
             except TypeError:
@@ -122,6 +127,7 @@ class mga:
         # Private data members
         self._n_legs = len(seq) - 1
         self._common_mu = seq[0].mu_central_body
+        self.max_revs = max_revs
 
     def get_nobj(self):
         return self.multi_objective + 1
@@ -131,29 +137,29 @@ class mga:
         tof = self.tof
         n_legs = self._n_legs
 
-        if self.tof_encoding is 'alpha':
+        if self.tof_encoding == 'alpha':
             # decision vector is  [t0, T, a1, a2, ....]
             lb = [t0[0].mjd2000, tof[0]] + [1e-3] * (n_legs)
             ub = [t0[1].mjd2000, tof[1]] + [1.0 - 1e-3] * (n_legs)
-        elif self.tof_encoding is 'direct':
+        elif self.tof_encoding == 'direct':
             # decision vector is  [t0, T1, T2, T3, ... ]
             lb = [t0[0].mjd2000] + [it[0] for it in self.tof]
             ub = [t0[1].mjd2000] + [it[1] for it in self.tof]
-        elif self.tof_encoding is 'eta':
+        elif self.tof_encoding == 'eta':
             # decision vector is  [t0, n1, n2, ....]
             lb = [t0[0].mjd2000] + [1e-3] * (n_legs)
             ub = [t0[1].mjd2000] + [1.0 - 1e-3] * (n_legs)
         return (lb, ub)
 
-    def _decode_tofs(self, x):
-        if self.tof_encoding is 'alpha':
+    def _decode_tofs(self, x: List[float]) -> List[float]:
+        if self.tof_encoding == 'alpha':
             # decision vector is  [t0, T, a1, a2, ....]
             T = np.log(x[2:])
             return T / sum(T) * x[1]
-        elif self.tof_encoding is 'direct':
+        elif self.tof_encoding == 'direct':
             # decision vector is  [t0, T1, T2, T3, ... ]
             return x[1:]
-        elif self.tof_encoding is 'eta':
+        elif self.tof_encoding == 'eta':
             # decision vector is  [t0, n1, n2, n3, ... ]
             dt = self.tof
             T = [0] * self._n_legs
@@ -202,7 +208,7 @@ class mga:
         Raises:
             - ValueError: when the tof_encoding is not 'eta'
         """
-        if self.tof_encoding is not 'eta':
+        if self.tof_encoding != 'eta':
             raise ValueError(
                 "cannot call this method if the tof_encoding is not 'eta'")
 
@@ -228,7 +234,7 @@ class mga:
         Raises:
             - ValueError: when the tof_encoding is not 'eta'
         """
-        if self.tof_encoding is not 'eta':
+        if self.tof_encoding != 'eta':
             raise ValueError(
                 "cannot call this method if the tof_encoding is not 'eta'")
         from copy import deepcopy
@@ -238,21 +244,40 @@ class mga:
             retval[i] = x[i] / (self.tof - sum(x[1:i]))
         return retval
 
-    def _compute_dvs(self, x):
+    def _compute_dvs(self, x: List[float]) -> Tuple[
+        float, # DVlaunch
+        List[float], # DVs
+        float, # DVarrival,
+        List[Any], # Lambert legs
+        float, #DVlaunch_tot
+        List[float], # T
+        List[Tuple[List[float], List[float]]], # ballistic legs
+        List[float], # epochs of ballistic legs
+    ]:
         # 1 -  we 'decode' the times of flights and compute epochs (mjd2000)
-        T = self._decode_tofs(x)  # [T1, T2 ...]
+        T: List[float] = self._decode_tofs(x)  # [T1, T2 ...]
         ep = np.insert(T, 0, x[0])  # [t0, T1, T2 ...]
         ep = np.cumsum(ep)  # [t0, t1, t2, ...]
         # 2 - we compute the ephemerides
         r = [0] * len(self.seq)
         v = [0] * len(self.seq)
         for i in range(len(self.seq)):
-            r[i], v[i] = self.seq[i].eph(ep[i])
-        # 3 - we solve the lambert problems
+            r[i], v[i] = self.seq[i].eph(float(ep[i]))
+
         l = list()
+        ballistic_legs: List[Tuple[List[float],List[float]]] = []
+        ballistic_ep: List[float] = []
+
+        # 3 - we solve the lambert problems
+        vi = v[0]
         for i in range(self._n_legs):
-            l.append(lambert_problem(
-                r[i], r[i + 1], T[i] * DAY2SEC, self._common_mu, False, 0))
+            lp = lambert_problem_multirev(
+                vi, lambert_problem(
+                    r[i], r[i + 1], T[i] * DAY2SEC, self._common_mu, False, self.max_revs))
+            l.append(lp)
+            vi = lp.get_v2()[0]
+            ballistic_legs.append((r[i], lp.get_v1()[0]))
+            ballistic_ep.append(ep[i])
         # 4 - we compute the various dVs needed at fly-bys to match incoming
         # and outcoming
         DVfb = list()
@@ -274,16 +299,16 @@ class mga:
             DVper2 = np.sqrt(2 * self.seq[-1].mu_self / self.rp_target -
                              self.seq[-1].mu_self / self.rp_target * (1. - self.e_target))
             DVarrival = np.abs(DVper - DVper2)
-        return (DVlaunch, DVfb, DVarrival, l, DVlaunch_tot)
+        return (DVlaunch, DVfb, DVarrival, l, DVlaunch_tot, T, ballistic_legs, ballistic_ep)
 
     # Objective function
     def fitness(self, x):
-        DVlaunch, DVfb, DVarrival, _, _ = self._compute_dvs(x)
-        if self.tof_encoding is 'direct':
+        DVlaunch, DVfb, DVarrival, _, _, _, _, _ = self._compute_dvs(x)
+        if self.tof_encoding == 'direct':
             T = sum(x[1:])
-        elif self.tof_encoding is 'alpha':
+        elif self.tof_encoding == 'alpha':
             T = x[1]
-        elif self.tof_encoding is 'eta':
+        elif self.tof_encoding == 'eta':
             T = sum(self.eta2direct(x)[1:])
         if self.multi_objective:
             return [DVlaunch + np.sum(DVfb) + DVarrival, T]
@@ -301,22 +326,22 @@ class mga:
         T = self._decode_tofs(x)
         ep = np.insert(T, 0, x[0])  # [t0, T1, T2 ...]
         ep = np.cumsum(ep)  # [t0, t1, t2, ...]
-        DVlaunch, DVfb, DVarrival, l, DVlaunch_tot = self._compute_dvs(x)
+        DVlaunch, DVfb, DVarrival, l, DVlaunch_tot, _, _, _ = self._compute_dvs(x)
         print("Multiple Gravity Assist (MGA) problem: ")
         print("Planet sequence: ", [pl.name for pl in self.seq])
 
-        print("Departure: ", seq[0].name)
+        print("Departure: ", self.seq[0].name)
         print("\tEpoch: ", ep[0], " [mjd2000]")
         print("\tSpacecraft velocity: ", l[0].get_v1()[0], "[m/s]")
         print("\tHyperbolic velocity: ", DVlaunch_tot, "[m/s]")
         print("\tInitial DV: ", DVlaunch, "[m/s]")
 
-        for pl, e, dv in zip(seq[1:-1], ep[1:-1], DVfb):
+        for pl, e, dv in zip(self.seq[1:-1], ep[1:-1], DVfb):
             print("Fly-by: ", pl.name)
             print("\tEpoch: ", e, " [mjd2000]")
             print("\tDV: ", dv, "[m/s]")
 
-        print("Arrival: ", seq[-1].name)
+        print("Arrival: ", self.seq[-1].name)
         print("\tEpoch: ", ep[-1], " [mjd2000]")
         print("\tSpacecraft velocity: ", l[-1].get_v2()[0], "[m/s]")
         print("\tArrival DV: ", DVarrival, "[m/s]")
@@ -346,10 +371,10 @@ class mga:
             fig = plt.figure()
             axes = fig.gca(projection='3d')
 
-        T = self._decode_tofs(x)
+        _, _, _, l, _, T, _, _ = self._compute_dvs(x)
         ep = np.insert(T, 0, x[0])  # [t0, T1, T2 ...]
         ep = np.cumsum(ep)  # [t0, t1, t2, ...]
-        _, _, _, l, _ = self._compute_dvs(x)
+        
         for pl, e in zip(self.seq, ep):
             plot_planet(pl, epoch(e), units=units, legend=True,
                         color=(0.7, 0.7, 1), axes=axes)
@@ -357,6 +382,78 @@ class mga:
             plot_lambert(lamb, N=N, sol=0, units=units, color='k',
                          legend=False, axes=axes, alpha=0.8)
         return axes
+
+    def get_eph_function(self, x: List[float]):
+        """
+        For a chromosome x, returns a function object eph to compute the ephemerides of the spacecraft
+
+        Args:
+            - x (``list``, ``tuple``, ``numpy.ndarray``): Decision chromosome, e.g. (``pygmo.population.champion_x``).
+
+        Example:
+
+          eph = prob.get_eph_function(population.champion_x)
+          pos, vel = eph(pykep.epoch(7000))
+
+        """
+        if len(x) != len(self.get_bounds()[0]):
+            raise ValueError(
+                "Expected chromosome of length "
+                + str(len(self.get_bounds()[0]))
+                + " but got length "
+                + str(len(x))
+            )
+
+        _, _, _, _, _, _, b_legs, b_ep = self._compute_dvs(x)
+        
+        def eph(
+            t: float
+        ) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
+
+            if t < b_ep[0]:
+                raise ValueError(
+                    "Given epoch " + str(t) + " is before launch date " + str(b_ep[0])
+                )
+
+            if t == b_ep[0]:
+                # exactly at launch
+                return self.seq[0].eph(t)
+
+            i = bisect_left(b_ep, t)  # ballistic leg i goes from planet i to planet i+1
+
+            assert i >= 1 and i <= len(b_ep)
+            if i < len(b_ep):
+                assert t <= b_ep[i]
+
+            # get start of ballistic leg
+            r_b, v_b = b_legs[i - 1]
+
+            elapsed_seconds = (t - b_ep[i - 1]) * DAY2SEC
+            assert elapsed_seconds >= 0
+
+            # propagate the lagrangian
+            r, v = propagate_lagrangian(r_b, v_b, elapsed_seconds, self.seq[0].mu_central_body)
+
+            return r, v
+        
+        return eph
+
+    def plot_distance_and_flybys(self, x: List[float], **kwargs):
+
+        from pykep.orbit_plots import plot_flybys
+        eph_function = self.get_eph_function(x)
+        T = self._decode_tofs(x)
+        ep = np.insert(T, 0, x[0])  # [t0, T1, T2 ...]
+        ep = np.cumsum(ep)  # [t0, t1, t2, ...]
+
+        return plot_flybys(self.seq, ep, eph_function, probename=self.get_name(), **kwargs)
+
+    def get_name(self):
+        return "MGA Trajectory"
+
+    def __repr__(self):
+        return self.get_name()
+
 
 
 if __name__ == "__main__":

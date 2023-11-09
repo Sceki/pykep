@@ -23,8 +23,8 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.               *
  *****************************************************************************/
 
-#include "../src/core_functions/array3D_operations.h"
-#include "../src/planet/tle.h"
+#include <keplerian_toolbox/core_functions/array3D_operations.hpp>
+#include <keplerian_toolbox/planet/tle.hpp>
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -35,7 +35,7 @@ using namespace kep_toolbox;
 // In this test we read the historical two line elements of a GPS satellite
 // from the file sgp4_test.txt
 // These represent actual observations made on the satellite r and v.
-// We then compute r and v propagating the TLE of the previous pobservation
+// We then compute r and v propagating the TLE of the previous observation
 // up to the current observation and measure the error. The test passes if
 // the max error is less than 10 km on the position and 15 m/s/ on the velocity
 
@@ -70,10 +70,10 @@ int main()
         line2 = line22;
     }
     double sum = std::accumulate(errors_r.begin(), errors_r.end(), 0.0);
-    double mean_r = sum / errors_r.size();
+    double mean_r = sum / static_cast<double>(errors_r.size());
 
     sum = std::accumulate(errors_v.begin(), errors_v.end(), 0.0);
-    double mean_v = sum / errors_v.size();
+    double mean_v = sum / static_cast<double>(errors_v.size());
     double max_r = *std::max_element(errors_r.begin(), errors_r.end());
     double max_v = *std::max_element(errors_v.begin(), errors_v.end());
 

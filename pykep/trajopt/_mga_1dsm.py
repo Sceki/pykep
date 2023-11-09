@@ -1,7 +1,11 @@
 from pykep.core import epoch, DAY2SEC, MU_SUN, lambert_problem, propagate_lagrangian, fb_prop, AU, epoch
 from pykep.planet import jpl_lp
+from pykep.trajopt._lambert import lambert_problem_multirev
 from math import pi, cos, sin, acos, log, sqrt
 import numpy as np
+from typing import Any, Dict, List, Tuple
+from bisect import bisect_left
+
 
 # Avoiding scipy dependency
 def norm(x):
@@ -9,7 +13,7 @@ def norm(x):
 
 class mga_1dsm:
     r"""
-    This class transcribes a Multiple Gravity Assist trajectory with one deep space manouvre per leg (MGA-1DSM) into an optimisation problem.
+    This class transcribes a Multiple Gravity Assist trajectory with one deep space maneuver per leg (MGA-1DSM) into an optimisation problem.
     It may be used as a User Defined Problem (UDP) for the pygmo (http://esa.github.io/pygmo/) optimisation suite.
 
     - Izzo, Dario. "Global optimization and space pruning for spacecraft trajectory design." Spacecraft Trajectory Optimization 1 (2010): 178-200.
@@ -55,7 +59,8 @@ class mga_1dsm:
                  rp_target = None,
                  eta_lb = 0.1,
                  eta_ub = 0.9,
-                 rp_ub = 30
+                 rp_ub = 30,
+                 max_revs = 0
                  ):
         """
         pykep.trajopt.mga_1dsm(seq = [jpl_lp('earth'), jpl_lp('venus'), jpl_lp('earth')], t0 = [epoch(0),epoch(1000)], tof = [1.0,5.0], vinf = [0.5, 2.5], multi_objective = False, add_vinf_dep = False, add_vinf_arr=True)
@@ -74,6 +79,7 @@ class mga_1dsm:
         - orbit_insertion (``bool``): when True the arrival dv is computed as that required to acquire a target orbit defined by e_target and rp_target
         - e_target (``float``): if orbit_insertion is True this defines the target orbit eccentricity around the final planet
         - rp_target (``float``): if orbit_insertion is True this defines the target orbit pericenter around the final planet (in m)
+        - max_revs (``int``): maximal number of revolutions for lambert transfer
         """
 
         # Sanity checks
@@ -86,15 +92,15 @@ class mga_1dsm:
             raise TypeError(
                 'tof encoding must be one of \'alpha\', \'eta\', \'direct\'')
         # 3 - tof is expected to have different content depending on the tof_encoding
-        if tof_encoding is 'direct':
+        if tof_encoding == 'direct':
             if np.shape(np.array(tof)) != (len(seq) - 1, 2):
                 raise TypeError(
                     'tof_encoding is ' + tof_encoding + ' and tof must be a list of two dimensional lists and with length equal to the number of legs')
-        if tof_encoding is 'alpha':
+        if tof_encoding == 'alpha':
             if np.shape(np.array(tof)) != (2,):
                 raise TypeError(
                     'tof_encoding is ' + tof_encoding + ' and tof must be a list of two floats')
-        if tof_encoding is 'eta':
+        if tof_encoding == 'eta':
             if np.shape(np.array(tof)) != ():
                 raise TypeError(
                     'tof_encoding is ' + tof_encoding + ' and tof must be a float')
@@ -136,6 +142,7 @@ class mga_1dsm:
 
         self.n_legs = len(seq) - 1
         self.common_mu = seq[0].mu_central_body
+        self.max_revs = max_revs
 
     def get_nobj(self):
         return self._multi_objective + 1
@@ -151,10 +158,10 @@ class mga_1dsm:
         ub = [t0[1].mjd2000] + [1.0, 1.0, vinf[1] * 1000, self._eta_ub,
                                 1.0 - 1e-3] + [2 * pi, self._rp_ub, self._eta_ub, 1.0 - 1e-3] * (self.n_legs - 1)
         # Distinguishing among cases (only direct and alpha)
-        if self._tof_encoding is 'alpha':
+        if self._tof_encoding == 'alpha':
             lb = lb + [tof[0]]
             ub = ub + [tof[1]]
-        elif self._tof_encoding is 'direct':
+        elif self._tof_encoding == 'direct':
             for i in range(self.n_legs):
                 lb[5 + 4 * i] = tof[i][0]
                 ub[5 + 4 * i] = tof[i][1]
@@ -166,17 +173,17 @@ class mga_1dsm:
 
     def _decode_times_and_vinf(self, x):
         # 1 - we decode the times of flight
-        if self._tof_encoding is 'alpha':
+        if self._tof_encoding == 'alpha':
             # decision vector is  [t0] + [u, v, Vinf, eta1, a1] + [beta, rp/rV, eta2, a2] + ... + [T]
             T = list([0] * (self.n_legs))
             for i in range(len(T)):
                 T[i] = -log(x[5 + 4 * i])
             alpha_sum = sum(T)
             retval_T = [x[-1] * time / alpha_sum for time in T]
-        elif self._tof_encoding is 'direct':
+        elif self._tof_encoding == 'direct':
             # decision vector is  [t0] + [u, v, Vinf, eta1, T1] + [beta, rp/rV, eta2, T2] + ...
             retval_T = x[5::4]
-        elif self._tof_encoding is 'eta':
+        elif self._tof_encoding == 'eta':
             # decision vector is  [t0] + [u, v, Vinf, eta1, n1] + [beta, rp/rV, eta2, n2] + ...
             dt = self._tof
             T = [0] * self.n_legs
@@ -194,8 +201,17 @@ class mga_1dsm:
 
         return (retval_T, Vinfx, Vinfy, Vinfz)
 
-    # Objective function
-    def fitness(self, x):
+    def _decode_tofs(self, x):
+        T, _, _, _ = self._decode_times_and_vinf(x)
+        return T
+
+    def _compute_dvs(self, x: List[float]) -> Tuple[
+        List[float], # DVs
+        List[Any], # Lambert legs
+        List[float], # T
+        List[Tuple[List[float], List[float]]], # ballistic legs
+        List[float], # epochs of ballistic legs
+    ]:
         # 1 -  we 'decode' the chromosome recording the various times of flight
         # (days) in the list T and the cartesian components of vinf
         T, Vinfx, Vinfy, Vinfz = self._decode_times_and_vinf(x)
@@ -208,18 +224,27 @@ class mga_1dsm:
         for i in range(len(self._seq)):
             t_P[i] = epoch(x[0] + sum(T[0:i]))
             r_P[i], v_P[i] = self._seq[i].eph(t_P[i])
+        ballistic_legs: List[Tuple[List[float],List[float]]] = []
+        ballistic_ep: List[float] = []
+        lamberts = []
 
         # 3 - We start with the first leg
         v0 = [a + b for a, b in zip(v_P[0], [Vinfx, Vinfy, Vinfz])]
+        ballistic_legs.append((r_P[0], v0))
+        ballistic_ep.append(t_P[0].mjd2000)
         r, v = propagate_lagrangian(
             r_P[0], v0, x[4] * T[0] * DAY2SEC, self.common_mu)
 
         # Lambert arc to reach seq[1]
         dt = (1 - x[4]) * T[0] * DAY2SEC
-        l = lambert_problem(
-            r, r_P[1], dt, self.common_mu, cw = False, max_revs = 0)
+        l = lambert_problem_multirev(v, lambert_problem(
+                    r, r_P[1], dt, self.common_mu, cw=False, max_revs=self.max_revs))
         v_end_l = l.get_v2()[0]
         v_beg_l = l.get_v1()[0]
+        lamberts.append(l)
+
+        ballistic_legs.append((r, v_beg_l))
+        ballistic_ep.append(t_P[0].mjd2000 + x[4] * T[0])
 
         # First DSM occuring at time nu1*T1
         DV[0] = norm([a - b for a, b in zip(v_beg_l, v)])
@@ -229,17 +254,23 @@ class mga_1dsm:
             # Fly-by
             v_out = fb_prop(v_end_l, v_P[i], x[
                             7 + (i - 1) * 4] * self._seq[i].radius, x[6 + (i - 1) * 4], self._seq[i].mu_self)
+            ballistic_legs.append((r_P[i], v_out))
+            ballistic_ep.append(t_P[i].mjd2000)
             # s/c propagation before the DSM
             r, v = propagate_lagrangian(
                 r_P[i], v_out, x[8 + (i - 1) * 4] * T[i] * DAY2SEC, self.common_mu)
             # Lambert arc to reach Earth during (1-nu2)*T2 (second segment)
             dt = (1 - x[8 + (i - 1) * 4]) * T[i] * DAY2SEC
-            l = lambert_problem(r, r_P[i + 1], dt,
-                                self.common_mu, cw=False, max_revs=0)
+            l = lambert_problem_multirev(v, lambert_problem(r, r_P[i + 1], dt,
+                                  self.common_mu, cw=False, max_revs=self.max_revs))
             v_end_l = l.get_v2()[0]
             v_beg_l = l.get_v1()[0]
+            lamberts.append(l)
             # DSM occuring at time nu2*T2
             DV[i] = norm([a - b for a, b in zip(v_beg_l, v)])
+
+            ballistic_legs.append((r, v_beg_l))
+            ballistic_ep.append(t_P[i].mjd2000 + x[8 + (i - 1) * 4] * T[i])
 
         # Last Delta-v
         if self._add_vinf_arr:
@@ -256,14 +287,19 @@ class mga_1dsm:
         if self._add_vinf_dep:
             DV[0] += x[3]
 
+        return (DV, lamberts, T, ballistic_legs, ballistic_ep)
+
+    # Objective function
+    def fitness(self, x):
+        DV, _, T, _, _ = self._compute_dvs(x)
         if not self._multi_objective:
-            return (sum(DV),)
+            return [sum(DV),]
         else:
             return (sum(DV), sum(T))
 
     def pretty(self, x):
         """
-        prob.plot(x)
+        prob.pretty(x)
 
         - x: encoded trajectory
 
@@ -301,8 +337,8 @@ class mga_1dsm:
 
         # Lambert arc to reach seq[1]
         dt = (1 - x[4]) * T[0] * DAY2SEC
-        l = lambert_problem(
-            r, r_P[1], dt, self.common_mu, cw = False, max_revs = 0)
+        l = lambert_problem_multirev(v, lambert_problem(
+            r, r_P[1], dt, self.common_mu, cw=False, max_revs=self.max_revs))
         v_end_l = l.get_v2()[0]
         v_beg_l = l.get_v1()[0]
 
@@ -328,8 +364,8 @@ class mga_1dsm:
             print("DSM after " + str(x[8 + (i - 1) * 4] * T[i]) + " days")
             # Lambert arc to reach Earth during (1-nu2)*T2 (second segment)
             dt = (1 - x[8 + (i - 1) * 4]) * T[i] * DAY2SEC
-            l = lambert_problem(r, r_P[i + 1], dt,
-                                self.common_mu, cw=False, max_revs=0)
+            l = lambert_problem_multirev(v, lambert_problem(r, r_P[i + 1], dt,
+                                self.common_mu, cw=False, max_revs=self.max_revs))
             v_end_l = l.get_v2()[0]
             v_beg_l = l.get_v1()[0]
             # DSM occuring at time nu2*T2
@@ -405,12 +441,15 @@ class mga_1dsm:
             r_P[0], v0, x[4] * T[0] * DAY2SEC, self.common_mu)
 
         plot_kepler(r_P[0], v0, x[4] * T[0] * DAY2SEC, self.common_mu,
-                    N=100, color='b', legend=False, units=AU, axes=axis)
+                    N=100, color='b', units=AU, axes=axis)
 
         # Lambert arc to reach seq[1]
         dt = (1 - x[4]) * T[0] * DAY2SEC
-        l = lambert_problem(r, r_P[1], dt, self.common_mu, False, False)
-        plot_lambert(l, sol=0, color='r', legend=False, units=AU, axes=axis)
+        
+        l = lambert_problem_multirev(v, lambert_problem(
+            r, r_P[1], dt, self.common_mu, cw=False, max_revs=self.max_revs))
+        
+        plot_lambert(l, sol=0, color='r', units=AU, axes=axis)
         v_end_l = l.get_v2()[0]
         v_beg_l = l.get_v1()[0]
 
@@ -426,12 +465,13 @@ class mga_1dsm:
             r, v = propagate_lagrangian(
                 r_P[i], v_out, x[8 + (i - 1) * 4] * T[i] * DAY2SEC, self.common_mu)
             plot_kepler(r_P[i], v_out, x[8 + (i - 1) * 4] * T[i] * DAY2SEC,
-                        self.common_mu, N=100, color='b', legend=False, units=AU, axes=axis)
+                        self.common_mu, N=100, color='b', units=AU, axes=axis)
             # Lambert arc to reach Earth during (1-nu2)*T2 (second segment)
             dt = (1 - x[8 + (i - 1) * 4]) * T[i] * DAY2SEC
 
-            l = lambert_problem(r, r_P[i + 1], dt,
-                                self.common_mu, False, False)
+            l = lambert_problem_multirev(v, lambert_problem(r, r_P[i + 1], dt,
+                self.common_mu, cw=False, max_revs=self.max_revs))
+
             plot_lambert(l, sol=0, color='r', legend=False,
                          units=AU, N=1000, axes=axis)
 
@@ -446,3 +486,84 @@ class mga_1dsm:
         return ("\n\t Sequence: " + [pl.name for pl in self._seq].__repr__() +
                 "\n\t Add launcher vinf to the objective?: " + self._add_vinf_dep.__repr__() +
                 "\n\t Add final vinf to the objective?: " + self._add_vinf_arr.__repr__())
+       
+    def plot_distance_and_flybys(self, x: List[float], **kwargs):
+        """
+        Plot solar distance and flybys of the trajectory defined by x.
+        
+        Args:
+            - x (``list``, ``tuple``, ``numpy.ndarray``): Decision chromosome, e.g. (``pygmo.population.champion_x``).
+            - axes: Matplotlib plotting axes
+            - N: number of sample points
+            - extension: number of days to propagate the trajectory after the last flyby
+
+        """
+
+        from pykep.orbit_plots import plot_flybys
+        eph_function = self.get_eph_function(x)
+        T = self._decode_tofs(x)
+        ep = np.insert(T, 0, x[0])  # [t0, T1, T2 ...]
+        ep = np.cumsum(ep)  # [t0, t1, t2, ...]
+
+
+        return plot_flybys(self._seq, ep, eph_function, probename=self.get_name(), **kwargs)
+
+    def get_name(self):
+        return "MGA_1DSM Trajectory"
+
+    def __repr__(self):
+        return self.get_name()
+
+    def get_eph_function(self, x):
+        """
+        For a chromosome x, returns a function object eph to compute the ephemerides of the spacecraft
+
+        Args:
+            - x (``list``, ``tuple``, ``numpy.ndarray``): Decision chromosome, e.g. (``pygmo.population.champion_x``).
+
+        Example:
+
+          eph = prob.get_eph_function(population.champion_x)
+          pos, vel = eph(pykep.epoch(7000))
+
+        """
+        if len(x) != len(self.get_bounds()[0]):
+            raise ValueError(
+                "Expected chromosome of length "
+                + str(len(self.get_bounds()[0]))
+                + " but got length "
+                + str(len(x))
+            )
+        _, _, _, b_legs, b_ep = self._compute_dvs(x)
+        
+        def eph(
+            t: float
+        ) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
+
+            if t < b_ep[0]:
+                raise ValueError(
+                    "Given epoch " + str(t) + " is before launch date " + str(b_ep[0])
+                )
+
+            if t == b_ep[0]:
+                # exactly at launch
+                return self._seq[0].eph(t)
+
+            i = bisect_left(b_ep, t)  # ballistic leg i goes from planet i to planet i+1
+
+            assert i >= 1 and i <= len(b_ep)
+            if i < len(b_ep):
+                assert t <= b_ep[i]
+
+            # get start of ballistic leg
+            r_b, v_b = b_legs[i - 1]
+
+            elapsed_seconds = (t - b_ep[i - 1]) * DAY2SEC
+            assert elapsed_seconds >= 0
+
+            # propagate the lagrangian
+            r, v = propagate_lagrangian(r_b, v_b, elapsed_seconds, self._seq[0].mu_central_body)
+
+            return r, v
+        
+        return eph

@@ -24,12 +24,13 @@
  *****************************************************************************/
 
 #include <boost/date_time/gregorian/gregorian.hpp>
+#include <cmath>
 #include <iomanip>
 #include <iostream>
 
-#include "astro_constants.h"
-#include "core_functions/convert_dates.h"
-#include "epoch.h"
+#include <keplerian_toolbox/astro_constants.hpp>
+#include <keplerian_toolbox/core_functions/convert_dates.hpp>
+#include <keplerian_toolbox/epoch.hpp>
 
 namespace kep_toolbox
 {
@@ -38,10 +39,10 @@ using namespace boost::posix_time;
 
 /// Constructor.
 /**
-* Constructs an epoch from a non-gregorian date.
-* \param[in] epoch_in A double indicating the non-gregorian date
-* \param[in] epoch_type One of [epoch::MJD2000, epoch::MJD, epoch::JD]
-*/
+ * Constructs an epoch from a non-gregorian date.
+ * \param[in] epoch_in A double indicating the non-gregorian date
+ * \param[in] epoch_type One of [epoch::MJD2000, epoch::MJD, epoch::JD]
+ */
 epoch::epoch(const double &epoch_in, type epoch_type) : mjd2000_m(epoch_in)
 {
     switch (epoch_type) {
@@ -58,11 +59,11 @@ epoch::epoch(const double &epoch_in, type epoch_type) : mjd2000_m(epoch_in)
 
 /// Constructor.
 /**
-* Constructs an epoch from a gregorian date. The time of the day is assumed to be midnight.
-* \param[in] year The gregorian year
-* \param[in] month The month of the year
-* \param[in] day The day of the month
-*/
+ * Constructs an epoch from a gregorian date. The time of the day is assumed to be midnight.
+ * \param[in] year The gregorian year
+ * \param[in] month The month of the year
+ * \param[in] day The day of the month
+ */
 epoch::epoch(const greg_year &year, const greg_month &month, const greg_day &day)
 {
     set_posix_time(ptime(date(year, month, day)));
@@ -70,9 +71,9 @@ epoch::epoch(const greg_year &year, const greg_month &month, const greg_day &day
 
 /// Constructor.
 /**
-* Constructs an epoch from a boost ptime object (posix time)
-* \param[in] posix_time The posix_time
-*/
+ * Constructs an epoch from a boost ptime object (posix time)
+ * \param[in] posix_time The posix_time
+ */
 epoch::epoch(const boost::posix_time::ptime &posix_time)
 {
     time_duration dt = posix_time - ptime(date(2000, 1, 1));
@@ -81,18 +82,19 @@ epoch::epoch(const boost::posix_time::ptime &posix_time)
         flag = true;
         dt = dt.invert_sign();
     }
-    double fr_secs = dt.fractional_seconds() * BOOST_DATE_PRECISION;
-    mjd2000_m = dt.hours() / 24.0 + dt.minutes() / 1440.0 + (dt.seconds() + fr_secs) / 86400.0;
+    double fr_secs = static_cast<double>(dt.fractional_seconds()) * BOOST_DATE_PRECISION;
+    mjd2000_m = static_cast<double>(dt.hours()) / 24.0 + static_cast<double>(dt.minutes()) / 1440.0
+                + (static_cast<double>(dt.seconds()) + fr_secs) / 86400.0;
     if (flag) mjd2000_m = -mjd2000_m;
 }
 
 /// jd getter.
 /**
-* Returns the julian date
-*
-* @return double containing the julian date
-*
-*/
+ * Returns the julian date
+ *
+ * @return double containing the julian date
+ *
+ */
 double epoch::jd() const
 {
     return mjd20002jd(mjd2000_m);
@@ -100,11 +102,11 @@ double epoch::jd() const
 
 /// mjd getter.
 /**
-* Returns the modified julian date
-*
-* @return double containing the modified julian date
-*
-*/
+ * Returns the modified julian date
+ *
+ * @return double containing the modified julian date
+ *
+ */
 double epoch::mjd() const
 {
     return mjd20002mjd(mjd2000_m);
@@ -112,9 +114,9 @@ double epoch::mjd() const
 
 /// mjd2000 getter.
 /**
-* Gets the modified julian date 2000
-* @return const reference to mjd2000
-*/
+ * Gets the modified julian date 2000
+ * @return const reference to mjd2000
+ */
 double epoch::mjd2000() const
 {
     return mjd2000_m;
@@ -122,14 +124,14 @@ double epoch::mjd2000() const
 
 /// Extracts the posix time
 /**
-* Returns the posix_time representation of the epoch. The method evaluates
-* from the mjd2000 the number of days, months, seconds and
-* micro/nano seconds passed since the 1st of January 2000 and uses this information
-* to build the posix time
-*
-* @return ptime containing the posix time
-*
-*/
+ * Returns the posix_time representation of the epoch. The method evaluates
+ * from the mjd2000 the number of days, months, seconds and
+ * micro/nano seconds passed since the 1st of January 2000 and uses this information
+ * to build the posix time
+ *
+ * @return ptime containing the posix time
+ *
+ */
 ptime epoch::get_posix_time() const
 {
     long hrs, min, sec, fsec;
@@ -139,13 +141,16 @@ ptime epoch::get_posix_time() const
         copy = -copy;
         flag = true;
     }
-    hrs = (long)(copy * 24);
-    min = (long)((copy * 24 - hrs) * 60);
-    sec = (long)((((copy * 24 - hrs) * 60) - min) * 60);
-    double dblfsec = ((((copy * 24 - hrs) * 60) - min) * 60) - sec;
+    hrs = static_cast<long>(copy * 24);
+    min = static_cast<long>((copy * 24 - static_cast<double>(hrs)) * 60);
+    sec = static_cast<long>((((copy * 24 - static_cast<double>(hrs)) * 60) - static_cast<double>(min)) * 60);
+    double dblfsec
+        = ((((copy * 24 - static_cast<double>(hrs)) * 60) - static_cast<double>(min)) * 60) - static_cast<double>(sec);
     std::ostringstream fsecstr;
-    fsecstr << std::setiosflags(std::ios::fixed) << std::setprecision(-log10(BOOST_DATE_PRECISION)) << dblfsec;
-    fsec = boost::lexical_cast<long>(fsecstr.str().substr(2, -log10(BOOST_DATE_PRECISION) + 1));
+    fsecstr << std::setiosflags(std::ios::fixed)
+            << std::setprecision(-static_cast<int>(std::log10(BOOST_DATE_PRECISION))) << dblfsec;
+    fsec = boost::lexical_cast<long>(
+        fsecstr.str().substr(2, static_cast<unsigned long>(-std::log10(BOOST_DATE_PRECISION) + 1)));
     ptime retval;
     if (flag)
         retval = ptime(date(2000, 1, 1), time_duration(-hrs, -min, -sec, -fsec));
@@ -156,11 +161,11 @@ ptime epoch::get_posix_time() const
 
 /// Sets the epoch from a posix time
 /**
-* Sets the epoch to a particular posix_time.
-*
-* \param[in] posix_time containing the posix time
-*
-*/
+ * Sets the epoch to a particular posix_time.
+ *
+ * \param[in] posix_time containing the posix time
+ *
+ */
 void epoch::set_posix_time(const boost::posix_time::ptime &posix_time)
 {
 

@@ -36,17 +36,20 @@
 #include <boost/python/register_ptr_to_python.hpp>
 #include <boost/python/self.hpp>
 
-#include "../../src/planet/base.h"
-#include "../../src/planet/gtoc2.h"
-#include "../../src/planet/gtoc5.h"
-#include "../../src/planet/gtoc6.h"
-#include "../../src/planet/gtoc7.h"
-#include "../../src/planet/j2.h"
-#include "../../src/planet/jpl_low_precision.h"
-#include "../../src/planet/keplerian.h"
-#include "../../src/planet/mpcorb.h"
-#include "../../src/planet/spice.h"
-#include "../../src/planet/tle.h"
+#include <keplerian_toolbox/config.hpp>
+#include <keplerian_toolbox/planet/base.hpp>
+#include <keplerian_toolbox/planet/gtoc2.hpp>
+#include <keplerian_toolbox/planet/gtoc5.hpp>
+#include <keplerian_toolbox/planet/gtoc6.hpp>
+#include <keplerian_toolbox/planet/gtoc7.hpp>
+#include <keplerian_toolbox/planet/j2.hpp>
+#include <keplerian_toolbox/planet/jpl_low_precision.hpp>
+#include <keplerian_toolbox/planet/keplerian.hpp>
+#include <keplerian_toolbox/planet/mpcorb.hpp>
+#include <keplerian_toolbox/planet/spice.hpp>
+#include <keplerian_toolbox/planet/tle.hpp>
+
+#include "planet_docstrings.hpp"
 #include "../utils.h"
 #include "python_base.h"
 
@@ -93,7 +96,7 @@ static inline class_<Planet, bases<planet::base>, bases<planet::keplerian>> plan
     return retval;
 }
 
-BOOST_PYTHON_MODULE(_planet)
+BOOST_PYTHON_MODULE(planet)
 {
     // Disable docstring c++ signature to allow sphinx autodoc to work properly
     docstring_options doc_options;
@@ -121,12 +124,14 @@ BOOST_PYTHON_MODULE(_planet)
                       "Example::\n\n"
                       "  mu_pla = earth.mu_self")
         .add_property("mu_central_body", &planet::python_base::get_mu_central_body,
-                      &planet::python_base::set_mu_central_body, "The central body gravity parameter in [m^3/s^2]\n\n"
-                                                                 "Example::\n\n"
-                                                                 "  mu = earth.mu_central_body")
-        .add_property("name", &planet::python_base::get_name, &planet::python_base::set_name, "The body Name\n\n"
-                                                                                              "Example::\n\n"
-                                                                                              "  name = earth.name")
+                      &planet::python_base::set_mu_central_body,
+                      "The central body gravity parameter in [m^3/s^2]\n\n"
+                      "Example::\n\n"
+                      "  mu = earth.mu_central_body")
+        .add_property("name", &planet::python_base::get_name, &planet::python_base::set_name,
+                      "The body Name\n\n"
+                      "Example::\n\n"
+                      "  name = earth.name")
         .add_property("radius", &planet::python_base::get_radius, &planet::python_base::set_radius,
                       "The planet radius in [m]\n\n"
                       "Example::\n\n"
@@ -137,26 +142,27 @@ BOOST_PYTHON_MODULE(_planet)
              "  T = earth.compute_period()\n"
              "  T = earth.compute_period(epoch(2345.3, 'mjd2000'))")
         .def("osculating_elements", &planet::python_base::compute_elements,
-             "Retruns a tuple containing the six osculating keplerian elements a,e,i,W,w,M at the reference epoch\n"
+             "Returns a tuple containing the six osculating keplerian elements a,e,i,W,w,M at the reference epoch\n"
              "(SI units used). If no epoch is passed 0. is assumed\n\n"
              "Example::\n\n"
              "  elem = earth.osculating_elements()\n"
              "  elem = earth.osculating_elements(epoch(2345.3, 'mjd2000'))")
         // Virtual methods that must be reimplemented
-        .def("eph", &eph_wrapper1, "pykep.planet._base.eph(when)\n\n"
-                                   "- when: a :py:class:`pykep.epoch` indicating the epoch at which the ephemerides "
-                                   "are needed, it can also be a double in which case its interpreted as a mjd2000\n\n"
-                                   "Retuns a tuple containing the planet position and velocity in SI units\n\n"
-                                   ".. note::\n\n"
-                                   "   This is a pure virtual method and must be reimplemented in the derived class\n\n"
-                                   "Example::\n\n"
-                                   "  r,v = earth.eph(epoch(5433), 'mjd2000')\n"
-                                   "  r,v = earth.eph(5433)")
+        .def("eph", &eph_wrapper1,
+             "pykep.planet._base.eph(when)\n\n"
+             "- when: a :py:class:`pykep.epoch` indicating the epoch at which the ephemerides "
+             "are needed, it can also be a double in which case its interpreted as a mjd2000\n\n"
+             "Returns a tuple containing the planet position and velocity in SI units\n\n"
+             ".. note::\n\n"
+             "   This is a pure virtual method and must be reimplemented in the derived class\n\n"
+             "Example::\n\n"
+             "  r,v = earth.eph(epoch(5433), 'mjd2000')\n"
+             "  r,v = earth.eph(5433)")
         .def("eph", &eph_wrapper2, " ")
         // Virtual methods that can be reimplemented
         .def("human_readable_extra", &planet::python_base::human_readable_extra,
              "pykep.planet._base.human_readable_extra()\n\n"
-             "Retuns a string with extra information on the problem.\n\n"
+             "Returns a string with extra information on the problem.\n\n"
              ".. note::\n\n"
              "   This is a virtual method and can be reimplemented in the derived class. In which case __repr__ will "
              "append its returned value\n")
@@ -185,8 +191,8 @@ BOOST_PYTHON_MODULE(_planet)
 
     planet_wrapper<planet::j2>("j2",
                                "An object with an orbit perturbed by J2, derives from :py:class:`pykep.planet._base`")
-        .def(init<optional<const epoch &, const array6D &, double, double, double, double, double,
-                           const std::string &>>())
+        .def(init<
+             optional<const epoch &, const array6D &, double, double, double, double, double, const std::string &>>())
         .def(init<const epoch &, const array3D &, const array3D &, double, double, double, double, double,
                   optional<const std::string &>>())
         .add_property("orbital_elements", &planet::j2::get_elements, &planet::j2::set_elements,
@@ -231,34 +237,11 @@ BOOST_PYTHON_MODULE(_planet)
              "Set the epoch of the TLE to the given date without changing any other elements.\n"
              "Used to work around the Y2056 bug in TLE definition\n\n");
 
-#ifdef PYKEP_USING_SPICE
+#if defined(PYKEP_USING_SPICE)
     planet_wrapper<planet::spice>(
-        "spice", "A planet using the eph from the SPICE Toolbox, derives from :py:class:`pykep.planet._base`")
+        "spice", "A planet to use the ephemerides from a loaded SPICE kernel")
         .def(init<optional<const std::string &, const std::string &, const std::string &, const std::string &, double,
-                           double, double, double>>(
-            "pykep.planet.spice(target, observer, ref_frame, aberrations, mu_central_body, mu_self, radius, "
-            "self_radius)\n\n"
-            "- target:			Target body (see `NAIF IDs "
-            "<http://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/naif_ids.html#NAIF%20Object%20ID%20numbers>`_)\n"
-            "- observer:		Observer body (see `NAIF IDs "
-            "<http://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/naif_ids.html#NAIF%20Object%20ID%20numbers>`_)\n"
-            "- ref_frame:		The reference frame (see `SPICE supported frames "
-            "<http://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/frames.html#Frames%20Supported%20in%20SPICE>`_)\n"
-            "- aberrations: 	Aberration correction type (see spkezr_c docs "
-            "<http://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/spkezr_c.html>`_)\n"
-            "- mu_central_body: Gravity parameter of the central body (this is not used to compute the ephemerides). "
-            "Note that this is needed to compute the orbital elements\n"
-            "- mu_self: 		Gravity parameter of the target\n"
-            "- radius: 			Radius of target body\n"
-            "- self_radius: 	Safe radius of target bodyn\n\n"
-            ".. note::\n\n"
-            "   The presence of the corresponding kernel files are only checked upon call to the ephemerides method. "
-            "   As a consequence this object can still be constructed with invalid names\n"
-            "   or spelling mistakes. Only later the ephemerides call will fail throwing an excpetion\n\n"
-            ".. note::\n\n"
-            "   mu_central_body must be set if the period or the orbital elements need to be computed\n\n"
-            "Example::\n\n"
-            "  planet = planet.spice('EARTH', 'SUN', 'ECLIPJ2000', 'NONE', MU_SUN, MU_EARTH, ERATH_R, EARTH_R * 1.05)"));
+                           double, double, double>>(pykep::planet_spice_doc().c_str()));
 #endif
     // 2 - Planets deriving from keplerian
     planet_kep_wrapper<planet::mpcorb>(

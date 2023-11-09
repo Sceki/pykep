@@ -40,19 +40,20 @@ class add_gradient:
 
 
 def algo_factory(name, original_screen_output=True):
-    if name is "slsqp":
+    if name == "slsqp":
         uda = pg.nlopt('slsqp')
         uda.xtol_rel = 1e-5
         uda.ftol_rel = 0
         algo = pg.algorithm(uda)
         algo.set_verbosity(1)
         return algo
-    elif name is "ipopt":
+    elif name == "ipopt":
         if original_screen_output:
             pl = 5
         else:
             pl = 0
-        uda = pg.ipopt()
+        # Disable lint check on next line. Known issue (pagmo2/issues/261)
+        uda = pg.ipopt() # pylint: disable=no-member
         uda.set_integer_option("print_level", pl)
         uda.set_integer_option("acceptable_iter", 4)
         uda.set_integer_option("max_iter", 150)
@@ -69,7 +70,7 @@ def algo_factory(name, original_screen_output=True):
 
         algo = pg.algorithm(uda)
         return algo
-    elif name is "snopt7":
+    elif name == "snopt7":
         import pygmo_plugins_nonfree as pg7
         uda = pg7.snopt7(original_screen_output,
                          "/usr/local/lib/libsnopt7_c.so")

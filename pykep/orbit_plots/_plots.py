@@ -1,27 +1,30 @@
-def plot_planet(plnt, t0='pykep.epoch(0)', N=60, units=1.0, color='k', alpha=1.0, s=40, legend=False, axes=None):
+def plot_planet(plnt, t0=0, tf=None, N=60, units=1.0, color='k', alpha=1.0, s=40, legend=(False, False), axes=None):
     """
-    ax = plot_planet(plnt, t0='pykep.epoch(0)', N=60, units=1.0, color='k', s=40, legend=False, axes=None)
+    ax = plot_planet(plnt, t0=0, tf=None, N=60, units=1.0, color='k', alpha=1.0, s=40, legend=(False, False), axes=None):
 
-    - axes:      3D axis object created using fig.gca(projection='3d')
+    - axes:      3D axis object created using fig.add_subplot(projection='3d')
     - plnt:      pykep.planet object we want to plot
-    - t0:        pykep.epoch object indicating when we want to plot the planet position
+    - t0:        a pykep.epoch or float (mjd2000) indicating the first date we want to plot the planet position
+    - tf:        a pykep.epoch or float (mjd2000) indicating the final date we want to plot the planet position.
+                 if None this is computed automatically from the orbital period (prone to error for non periodic orbits)
     - units:     the length unit to be used in the plot
-    - color:     matplotlib color to use to plot the line
-    - s:         planet size (pixel^2)
-    - legend     when True plots the legend with the planet name and the epoch
+    - color:     color to use to plot the orbit (passed to matplotlib)
+    - s:         planet size (passed to matplotlib)
+    - legend     2-D tuple of bool or string: The first element activates the planet scatter plot, 
+                 the second to the actual orbit. If a bool value is used, then an automated legend label is generated (if True), if a string is used, the string is the legend. Its also possible but deprecated to use a single bool value. In which case that value is used for both the tuple components.
 
-    Plots the planet position and its orbit
+    Plots the planet position and its orbit.
 
     Example::
 
-      from mpl_toolkits.mplot3d import Axes3D
-      import matplotlib.pyplot as plt
+	import pykep as pk
+	import matplotlib.pyplot as plt
 
-      fig = plt.figure()
-      ax = fig.gca(projection='3d')
-      pl = planet_ss('earth')
-      plot_planet(pl, axes=ax)
-      plt.show()
+	fig = plt.figure()
+	ax = fig.add_subplot(projection='3d')
+	pl = pk.planet.jpl_lp('earth')
+	t_plot = pk.epoch(219)
+	ax = pk.orbit_plots.plot_planet(pl, ax = ax, color='b')
     """
     from pykep import MU_SUN, SEC2DAY, epoch, AU, RAD2DEG
     from pykep.planet import keplerian
@@ -32,23 +35,28 @@ def plot_planet(plnt, t0='pykep.epoch(0)', N=60, units=1.0, color='k', alpha=1.0
 
     if axes is None:
         fig = plt.figure()
-        ax = fig.gca(projection='3d')
+        ax = fig.add_subplot(projection='3d')
     else:
         ax = axes
 
-    if t0 == 'pykep.epoch(0)':
-        t0 = epoch(0)
     if type(t0) is not epoch:
         t0 = epoch(t0)
 
-    # orbit period at epoch
-    T = plnt.compute_period(t0) * SEC2DAY
+    # This is to make the tuple API compatible with the old API
+    if type(legend) is bool:
+        legend = (legend, legend)
 
-    # make an osculating copy of the planet
-    el = list(plnt.osculating_elements(t0))
-    plnt_k = keplerian(t0, el, plnt.mu_central_body, plnt.mu_self, plnt.radius, plnt.safe_radius, plnt.name)
+    if tf is None:
+        # orbit period at epoch
+        T = plnt.compute_period(t0) * SEC2DAY
+    else:
+        if type(tf) is not epoch:
+            tf = epoch(tf)
+        T = (tf.mjd2000 - t0.mjd2000)
+        if T < 0:
+            raise ValueError("tf should be after t0 when plotting an orbit")
 
-    # points where the orbit will be plotted
+       # points where the orbit will be plotted
     when = np.linspace(0, T, N)
 
     # Ephemerides Calculation for the given planet
@@ -57,20 +65,34 @@ def plot_planet(plnt, t0='pykep.epoch(0)', N=60, units=1.0, color='k', alpha=1.0
     z = np.array([0.0] * N)
 
     for i, day in enumerate(when):
-        r, v = plnt_k.eph(epoch(t0.mjd2000 + day))
+        r, v = plnt.eph(epoch(t0.mjd2000 + day))
         x[i] = r[0] / units
         y[i] = r[1] / units
         z[i] = r[2] / units
 
     # Actual plot commands
-    if legend:
-        label = plnt.name + " " + t0.__repr__()[0:11]
+    if (legend[0] is True):
+        label1 = plnt.name + " " + t0.__repr__()[0:11]
+    elif (legend[0] is False):
+        label1 = None
+    elif (legend[0] is None):
+        label1 = None
     else:
-        label = None
-    ax.plot(x, y, z, label=label, c=color, alpha=alpha)
-    ax.scatter([x[0]], [y[0]], [z[0]], s=s, marker='o', alpha=0.8, c=[color])
+        label1 = legend[0]
 
-    if legend:
+    if (legend[1] is True):
+        label2 = plnt.name + " orbit"
+    elif (legend[1] is False):
+        label2 = None
+    elif (legend[1] is None):
+        label2 = None
+    else:
+        label2 = legend[1]
+
+    ax.plot(x, y, z, label=label2, c=color, alpha=alpha)
+    ax.scatter([x[0]], [y[0]], [z[0]], s=s, marker='o', alpha=0.8, c=[color], label=label1)
+
+    if legend[0] or legend[1]:
         ax.legend()
     return ax
 
@@ -79,9 +101,9 @@ def plot_lambert(l, N=60, sol=0, units=1.0, color='b', legend=False, axes=None, 
     """
     ax = plot_lambert(l, N=60, sol=0, units='pykep.AU', legend='False', axes=None, alpha=1.)
 
-    - axes:       3D axis object created using fig.gca(projection='3d')
+    - axes:     3D axis object created using fig.add_subplot(projection='3d')
     - l:        pykep.lambert_problem object
-    - N:		number of points to be plotted along one arc
+    - N:        number of points to be plotted along one arc
     - sol:      solution to the Lambert's problem we want to plot (must be in 0..Nmax*2)
                 where Nmax is the maximum number of revolutions for which there exist a solution.
     - units:    the length unit to be used in the plot
@@ -92,28 +114,28 @@ def plot_lambert(l, N=60, sol=0, units=1.0, color='b', legend=False, axes=None, 
 
     Example::
 
-      from mpl_toolkits.mplot3d import Axes3D
+      import pykep as pk
       import matplotlib.pyplot as plt
 
       fig = plt.figure()
-      ax = fig.gca(projection='3d')
+      ax = fig.add_subplot(projection='3d')
 
-      t1 = epoch(0)
-      t2 = epoch(640)
-      dt = (t2.mjd2000 - t1.mjd2000) * DAY2SEC
+      t1 = pk.epoch(0)
+      t2 = pk.epoch(640)
+      dt = (t2.mjd2000 - t1.mjd2000) * pk.DAY2SEC
 
-      pl = planet_ss('earth')
-      plot_planet(pl, t0=t1, axes=ax, color='k')
+      pl = pk.planet.jpl_lp('earth')
+      pk.orbit_plots.plot_planet(pl, t0=t1, axes=ax, color='k')
       rE,vE = pl.eph(t1)
 
-      pl = planet_ss('mars')
-      plot_planet(pl, t0=t2, axes=ax, color='r')
+      pl = pk.planet.jpl_lp('mars')
+      pk.orbit_plots.plot_planet(pl, t0=t2, axes=ax, color='r')
       rM, vM = pl.eph(t2)
 
-      l = lambert_problem(rE,rM,dt,MU_SUN)
-      plot_lambert(l, ax=ax, color='b')
-      plot_lambert(l, sol=1, axes=ax, color='g')
-      plot_lambert(l, sol=2, axes=ax, color='g')
+      l = lambert_problem(rE,rM,dt,pk.MU_SUN)
+      pk.orbit_plots.plot_lambert(l, ax=ax, color='b')
+      pk.orbit_plots.plot_lambert(l, sol=1, axes=ax, color='g')
+      pk.orbit_plots.plot_lambert(l, sol=2, axes=ax, color='g', legend = True)
 
       plt.show()
     """
@@ -124,7 +146,7 @@ def plot_lambert(l, N=60, sol=0, units=1.0, color='b', legend=False, axes=None, 
 
     if axes is None:
         fig = plt.figure()
-        ax = fig.gca(projection='3d')
+        ax = fig.add_subplot(projection='3d')
     else:
         ax = axes
 
@@ -140,7 +162,7 @@ def plot_lambert(l, N=60, sol=0, units=1.0, color='b', legend=False, axes=None, 
     # We define the integration time ...
     dt = T / (N - 1)
 
-    # ... and alocate the cartesian components for r
+    # ... and allocate the cartesian components for r
     x = np.array([0.0] * N)
     y = np.array([0.0] * N)
     z = np.array([0.0] * N)
@@ -162,40 +184,45 @@ def plot_lambert(l, N=60, sol=0, units=1.0, color='b', legend=False, axes=None, 
     if legend:
         ax.legend()
 
-    if axes is None:  # show only if axis is not set
-        plt.show()
     return ax
 
 
-def plot_kepler(r, v, t, mu, N=60, units=1, color='b', legend=False, axes=None):
+def plot_kepler(r0, v0, tof, mu, N=60, units=1, color='b', label=None, axes=None):
     """
-    ax = plot_kepler(r, v, t, mu, N=60, units=1, color='b', legend=False, axes=None):
+    ax = plot_kepler(r0, v0, tof, mu, N=60, units=1, color='b', label=None, axes=None):
 
-    - axes:     3D axis object created using fig.gca(projection='3d')
-    - r:        initial position (cartesian coordinates)
-    - v:		initial velocity (cartesian coordinates)
-    - t:		propagation time
-    - mu:		gravitational parameter
-    - N:		number of points to be plotted along one arc
+    - axes:     3D axis object created using fig.add_subplot(projection='3d')
+    - r0:       initial position (cartesian coordinates)
+    - v0:       initial velocity (cartesian coordinates)
+    - tof:      propagation time
+    - mu:       gravitational parameter
+    - N:	number of points to be plotted along one arc
     - units:	the length unit to be used in the plot
     - color:	matplotlib color to use to plot the line
-    - legend	when True it plots also the legend
+    - label 	adds a label to the plotted arc.
 
     Plots the result of a keplerian propagation
+
+    Example::
+
+        import pykep as pk
+        pi = 3.14
+        pk.orbit_plots.plot_kepler(r0 = [1,0,0], v0 = [0,1,0], tof = pi/3, mu = 1)
     """
 
     from pykep import propagate_lagrangian
     import matplotlib.pylab as plt
     from mpl_toolkits.mplot3d import Axes3D
+    from copy import deepcopy
 
     if axes is None:
         fig = plt.figure()
-        ax = fig.gca(projection='3d')
+        ax = fig.add_subplot(projection='3d')
     else:
         ax = axes
 
     # We define the integration time ...
-    dt = t / (N - 1)
+    dt = tof / (N - 1)
 
     # ... and calculate the cartesian components for r
     x = [0.0] * N
@@ -203,6 +230,8 @@ def plot_kepler(r, v, t, mu, N=60, units=1, color='b', legend=False, axes=None):
     z = [0.0] * N
 
     # We calculate the spacecraft position at each dt
+    r = deepcopy(r0)
+    v = deepcopy(v0)
     for i in range(N):
         x[i] = r[0] / units
         y[i] = r[1] / units
@@ -210,38 +239,39 @@ def plot_kepler(r, v, t, mu, N=60, units=1, color='b', legend=False, axes=None):
         r, v = propagate_lagrangian(r, v, dt, mu)
 
     # And we plot
-    if legend:
-        label = 'ballistic arc'
-    else:
-        label = None
     ax.plot(x, y, z, c=color, label=label)
-
-    if legend:
-        ax.legend()
-
-    if axes is None:  # show only if axis is not set
-        plt.show()
     return ax
 
 
-def plot_taylor(r, v, m, u, t, mu, veff, N=60, units=1, color='b', legend=False, axes=None):
+def plot_taylor(r0, v0, m0, thrust, tof, mu, veff, N=60, units=1, color='b', legend=False, axes=None):
     """
-    ax = plot_taylor(r, v, m, u, t, mu, veff, N=60, units=1, color='b', legend=False, axes=None):
+    ax = plot_taylor(r0, v0, m0, thrust, tof, mu, veff, N=60, units=1, color='b', legend=False, axes=None):
 
-    - axes:		3D axis object created using fig.gca(projection='3d')
-    - r:		initial position (cartesian coordinates)
-    - v:		initial velocity (cartesian coordinates)
-    - m: 		initial mass
-    - u:		cartesian components for the constant thrust
-    - t:		propagation time
-    - mu:		gravitational parameter
+    - axes:	3D axis object created using fig.add_subplot(projection='3d')
+    - r0:	initial position (cartesian coordinates)
+    - v0:	initial velocity (cartesian coordinates)
+    - m0: 	initial mass
+    - u:	cartesian components for the constant thrust
+    - tof:	propagation time
+    - mu:	gravitational parameter
     - veff:	the product Isp * g0
-    - N:		number of points to be plotted along one arc
+    - N:	number of points to be plotted along one arc
     - units:	the length unit to be used in the plot
     - color:	matplotlib color to use to plot the line
     - legend:	when True it plots also the legend
 
     Plots the result of a taylor propagation of constant thrust
+
+    Example::
+
+	import pykep as pk
+	import matplotlib.pyplot as plt
+	pi = 3.14
+
+	fig = plt.figure()
+	ax = fig.add_subplot(projection='3d')
+	pk.orbit_plots.plot_taylor([1,0,0],[0,1,0],100,[1,1,0],40, 1, 1, N = 1000, axes = ax)
+	plt.show()
     """
 
     from pykep import propagate_taylor
@@ -249,24 +279,28 @@ def plot_taylor(r, v, m, u, t, mu, veff, N=60, units=1, color='b', legend=False,
 
     if axes is None:
         fig = plt.figure()
-        ax = fig.gca(projection='3d')
+        ax = fig.add_subplot(projection='3d')
     else:
         ax = axes
 
     # We define the integration time ...
-    dt = t / (N - 1)
+    dt = tof / (N - 1)
 
     # ... and calcuate the cartesian components for r
     x = [0.0] * N
     y = [0.0] * N
     z = [0.0] * N
-
+    
+    # Replace r0, v0, m0 for r, v, m
+    r = r0
+    v = v0
+    m = m0
     # We calculate the spacecraft position at each dt
     for i in range(N):
         x[i] = r[0] / units
         y[i] = r[1] / units
         z[i] = r[2] / units
-        r, v, m = propagate_taylor(r, v, m, u, dt, mu, veff, -10, -10)
+        r, v, m = propagate_taylor(r, v, m, thrust, dt, mu, veff, -10, -10)
 
     # And we plot
     if legend:
@@ -283,20 +317,20 @@ def plot_taylor(r, v, m, u, t, mu, veff, N=60, units=1, color='b', legend=False,
     return ax
 
 
-def plot_taylor_disturbance(r, v, m, thrust, disturbance, t, mu, veff, N=60, units=1, color='b', legend=False, axes=None):
+def plot_taylor_disturbance(r0, v0, m0, thrust, disturbance, tof, mu, veff, N=60, units=1, color='b', legend=False, axes=None):
     """
     ax = plot_taylor_disturbance(r, v, m, thrust, disturbance, t, mu, veff, N=60, units=1, color='b', legend=False, axes=None):
 
-    - axes:			3D axis object created using fig.gca(projection='3d')
-    - r:			initial position (cartesian coordinates)
-    - v:			initial velocity (cartesian coordinates)
-    - m: 			initial mass
+    - axes:		3D axis object created using fig.add_subplot(projection='3d')
+    - r0:		initial position (cartesian coordinates)
+    - v0:		initial velocity (cartesian coordinates)
+    - m0: 		initial mass
     - thrust:		cartesian components for the constant thrust
-    - disturbance:	cartesian components for the constant disturbance
-    - t:			propagation time
-    - mu:			gravitational parameter
-    - veff:			the product Isp * g0
-    - N:			number of points to be plotted along one arc
+    - disturbance:	cartesian components for a constant disturbance (will not affect mass)
+    - tof:		propagation time
+    - mu:		gravitational parameter
+    - veff:		the product Isp * g0
+    - N:		number of points to be plotted along one arc
     - units:		the length unit to be used in the plot
     - color:		matplotlib color to use to plot the line
     - legend:		when True it plots also the legend
@@ -309,18 +343,22 @@ def plot_taylor_disturbance(r, v, m, thrust, disturbance, t, mu, veff, N=60, uni
 
     if axes is None:
         fig = plt.figure()
-        ax = fig.gca(projection='3d')
+        ax = fig.add_subplot(projection='3d')
     else:
         ax = axes
 
     # We define the integration time ...
-    dt = t / (N - 1)
+    dt = tof / (N - 1)
 
     # ... and calcuate the cartesian components for r
     x = [0.0] * N
     y = [0.0] * N
     z = [0.0] * N
 
+    # Replace r0, v0 and m0
+    r = r0
+    v = v0
+    m = m0
     # We calculate the spacecraft position at each dt
     for i in range(N):
         x[i] = r[0] / units
@@ -335,12 +373,6 @@ def plot_taylor_disturbance(r, v, m, thrust, disturbance, t, mu, veff, N=60, uni
     else:
         label = None
     ax.plot(x, y, z, c=color, label=label)
-
-    if legend:
-        ax.legend()
-
-    if axes is None:  # show only if axis is not set
-        plt.show()
     return ax
 
 
@@ -348,13 +380,13 @@ def plot_sf_leg(leg, N=5, units=1, color='b', legend=False, plot_line=True, plot
     """
     ax = plot_sf_leg(leg, N=5, units=1, color='b', legend=False, no_trajectory=False, axes=None):
 
-    - axes:		    3D axis object created using fig.gca(projection='3d')
-    - leg:	        a pykep.sims_flanagan.leg
-    - N:		    number of points to be plotted along one arc
+    - axes:	    3D axis object created using fig.add_subplot(projection='3d')
+    - leg:	    a pykep.sims_flanagan.leg
+    - N:	    number of points to be plotted along one arc
     - units:	    the length unit to be used in the plot
     - color:	    matplotlib color to use to plot the trajectory and the grid points
     - legend	    when True it plots also the legend
-    - plot_line: 	when True plots also the trajectory (between mid-points and grid points)
+    - plot_line:    when True plots also the trajectory (between mid-points and grid points)
 
     Plots a Sims-Flanagan leg
 
@@ -364,7 +396,7 @@ def plot_sf_leg(leg, N=5, units=1, color='b', legend=False, plot_line=True, plot
         import matplotlib.pyplot as plt
 
         fig = plt.figure()
-        ax = fig.gca(projection='3d')
+        ax = fig.add_subplot(projection='3d')
         t1 = epoch(0)
         pl = planet_ss('earth')
         rE,vE = pl.eph(t1)
@@ -391,7 +423,7 @@ def plot_sf_leg(leg, N=5, units=1, color='b', legend=False, plot_line=True, plot
 
     if axes is None:
         fig = plt.figure()
-        ax = fig.gca(projection='3d')
+        ax = fig.add_subplot(projection='3d')
     else:
         ax = axes
 
@@ -411,7 +443,7 @@ def plot_sf_leg(leg, N=5, units=1, color='b', legend=False, plot_line=True, plot
 
     # Forward propagation
 
-    # x,y,z contain the cartesian components of all points (grid+midpints)
+    # x,y,z contain the cartesian components of all points (grid+midpoints)
     x = [0.0] * (fwd_seg * 2 + 1)
     y = [0.0] * (fwd_seg * 2 + 1)
     z = [0.0] * (fwd_seg * 2 + 1)
@@ -563,3 +595,52 @@ def plot_sf_leg(leg, N=5, units=1, color='b', legend=False, plot_line=True, plot
     if axes is None:  # show only if axis is not set
         plt.show()
     return ax
+
+def plot_flybys(seq, ep, eph_function, probename="Probe", axes=None, N: int=200, extension: float=300):
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from pykep.core import epoch, AU
+
+    if len(seq) != len(ep):
+        raise ValueError("Got sequence of length " + len(seq) + ", but " + len(ep) + " time epochs.")
+
+    timeframe = np.linspace(0, ep[-1] - ep[0] + extension, N)
+
+    planets = set(seq)
+
+    distances = []
+    pl_distances = {pl : [] for pl in planets}
+    
+    xeph = eph_function
+
+    for day in timeframe:
+        # position of spacecraft
+        t = ep[0] + day
+        pos, vel = xeph(t)
+        distances.append(np.linalg.norm(pos) / AU)
+
+        # positions of planets
+        for pl in planets:
+            ppos, _ = pl.eph(t)
+            pl_distances[pl].append(np.linalg.norm(ppos) / AU)
+
+    # flyby markers
+    fl_times = list()
+    fl_distances = list()
+    for pl, t in zip(seq, ep):
+        fl_times.append(t - ep[0])
+        pos, _ = pl.eph(t)
+        fl_distances.append(np.linalg.norm(pos) / AU)
+
+    if axes is None:
+        fig, axes = plt.subplots()
+    axes.plot(list(timeframe), distances, label=probename)
+    for pl in planets:
+        axes.plot(list(timeframe), pl_distances[pl], label=pl.name.capitalize())
+    plt.scatter(fl_times, fl_distances, marker="o", color="r")
+    axes.set_xlabel("Days")
+    axes.set_ylabel("AU")
+    axes.set_title("Distance to Sun")
+    axes.legend()
+
+    return axes

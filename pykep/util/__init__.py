@@ -5,7 +5,7 @@ low-thrust tajectories using our own flavour of the Sims-Flanagan model: a traje
 transcription method that forms the basis for MALTO, the software in use in JPL
 for preliminary interplanetary trajectory design.
 """
-from pykep.util._util import *
+from pykep.util.util import *
 from pykep import __extensions__
 
 
@@ -28,7 +28,7 @@ def read_satcat(satcatfilename=None):
 
     Example::
 
-      satcat = pykep.read_satcat("my_dir/satcat.txt")
+      satcat = pykep.util.read_satcat("my_dir/satcat.txt")
       cross_section = satcat["1958-002B"].radarA
     """
     from collections import namedtuple
@@ -65,13 +65,12 @@ def read_tle(tle_file, verbose=False, with_name=True):
 
     Example::
 
-      planet_list = pykep.read_tle("my_dir/cosmos.tle")
-      satcat = pykep.read_satcat("my_dir/satcat.txt")
+      planet_list = pykep.util.read_tle("my_dir/cosmos.tle")
+      satcat = pykep.util.read_satcat("my_dir/satcat.txt")
       cross_sections = [satcat[pl.name()].radarA for pl in  planet_list]
     """
     from pykep.planet import tle
     planet_list = []
-
     with open(tle_file, 'r') as f:
         for line in f:
             if with_name:
@@ -79,5 +78,11 @@ def read_tle(tle_file, verbose=False, with_name=True):
             else:
                 line1 = line[:69]
             line2 = next(f)[:69]
-            planet_list.append(tle(line1, line2))
+            try:
+                planet_list.append(tle(line1, line2))
+            except:
+                print("Failed to construct a planet object using these two lines:")
+                print(line1)
+                print(line2)
+                raise
     return planet_list

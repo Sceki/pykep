@@ -26,9 +26,9 @@
 #include <boost/math/special_functions/acosh.hpp>
 #include <boost/math/special_functions/asinh.hpp>
 
-#include "core_functions/array3D_operations.h"
-#include "exceptions.h"
-#include "lambert_problem.h"
+#include <keplerian_toolbox/core_functions/array3D_operations.hpp>
+#include <keplerian_toolbox/exceptions.hpp>
+#include <keplerian_toolbox/lambert_problem.hpp>
 
 namespace kep_toolbox
 {
@@ -129,15 +129,15 @@ lambert_problem::lambert_problem(const array3D &r1, const array3D &r2, const dou
             }
         }
     }
-    // We exit this if clause with Mmax being the maximum number of revolutions
+    // We exit this if clause with Nmax being the maximum number of revolutions
     // for which there exists a solution. We crop it to m_multi_revs
     m_Nmax = std::min(m_multi_revs, m_Nmax);
 
     // 2.2 We now allocate the memory for the output variables
-    m_v1.resize(m_Nmax * 2 + 1);
-    m_v2.resize(m_Nmax * 2 + 1);
-    m_iters.resize(m_Nmax * 2 + 1);
-    m_x.resize(m_Nmax * 2 + 1);
+    m_v1.resize(static_cast<size_t>(m_Nmax) * 2 + 1);
+    m_v2.resize(static_cast<size_t>(m_Nmax) * 2 + 1);
+    m_iters.resize(static_cast<size_t>(m_Nmax) * 2 + 1);
+    m_x.resize(static_cast<size_t>(m_Nmax) * 2 + 1);
 
     // 3 - We may now find all solutions in x,y
     // 3.1 0 rev solution
@@ -150,10 +150,10 @@ lambert_problem::lambert_problem(const array3D &r1, const array3D &r2, const dou
         m_x[0] = pow((T / T00), 0.69314718055994529 / log(T1 / T00)) - 1.0;
     }
     // 3.1.2 Householder iterations
-    m_iters[0] = householder(T, m_x[0], 0.0, 1e-5, 15);
+    m_iters[0] = householder(T, m_x[0], 0, 1e-5, 15);
     // 3.2 multi rev solutions
     double tmp;
-    for (int i = 1; i < m_Nmax + 1; ++i) {
+    for (decltype(m_Nmax) i = 1; i < m_Nmax + 1; ++i) {
         // 3.2.1 left Householder iterations
         tmp = pow((i * M_PI + M_PI) / (8.0 * T), 2.0 / 3.0);
         m_x[2 * i - 1] = (tmp - 1) / (tmp + 1);
@@ -409,4 +409,4 @@ std::ostream &operator<<(std::ostream &s, const lambert_problem &lp)
     return s;
 }
 
-} // namespaces
+} // namespace kep_toolbox

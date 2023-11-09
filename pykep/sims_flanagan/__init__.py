@@ -5,7 +5,7 @@ low-thrust tajectories using our own flavour of the Sims-Flanagan model: a traje
 transcription method that forms the basis for MALTO, the software in use in JPL
 for preliminary interplanetary trajectory design.
 """
-from pykep.sims_flanagan._sims_flanagan import leg, leg_s, spacecraft, sc_state
+from pykep.sims_flanagan.sims_flanagan import leg, leg_s, spacecraft, sc_state
 
 
 def _leg_get_states(self):
@@ -40,7 +40,7 @@ def _leg_get_states(self):
 
     # Forward propagation
 
-    # x,y,z contain the cartesian components of all points (grid+midpints)
+    # x,y,z contain the cartesian components of all points (grid+midpoints)
     x = [0.0] * (fwd_seg * 2 + 1)
     y = [0.0] * (fwd_seg * 2 + 1)
     z = [0.0] * (fwd_seg * 2 + 1)

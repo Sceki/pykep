@@ -29,10 +29,22 @@
 #include <boost/python/wrapper.hpp>
 #include <string>
 
-#include "../../src/config.h"
-#include "../../src/exceptions.h"
-#include "../../src/planet/base.h"
-#include "../../src/serialization.h"
+#include <keplerian_toolbox/detail/visibility.hpp>
+#include <keplerian_toolbox/exceptions.hpp>
+#include <keplerian_toolbox/planet/base.hpp>
+#include <keplerian_toolbox/serialization.hpp>
+
+// The fact we have multiple libarries core.pyd, planet.pyd etc. makes it
+// necessary to have this visibility rule.
+#if defined(_WIN32) || defined(__CYGWIN__)
+
+#define PYKEP_DLL_PUBLIC __declspec(dllexport)
+
+#elif defined(__clang__) || defined(__GNUC__) || defined(__INTEL_COMPILER)
+
+#define PYKEP_DLL_PUBLIC __attribute__((visibility("default")))
+
+#endif
 
 namespace kep_toolbox
 {
@@ -40,7 +52,7 @@ namespace planet
 {
 
 // Wrapper for exporting the planet::base into python
-class __KEP_TOOL_VISIBLE python_base : public base, public boost::python::wrapper<base>
+class PYKEP_DLL_PUBLIC python_base : public base, public boost::python::wrapper<base>
 {
 public:
     /// Same constructor as plates::base
@@ -51,7 +63,7 @@ public:
     }
 
     /// Clone pure virtual
-    planet_ptr clone() const
+    planet_ptr clone() const override
     {
         planet_ptr retval = this->get_override("__get_deepcopy__")();
         if (!retval) {
@@ -62,7 +74,7 @@ public:
     }
 
     /// Human readable virtual
-    std::string human_readable_extra() const
+    std::string human_readable_extra() const override
     {
         if (boost::python::override f = this->get_override("human_readable_extra")) {
 #if BOOST_WORKAROUND(BOOST_MSVC, <= 1700)
@@ -80,7 +92,7 @@ public:
 
 protected:
     /// Pure virtual ephemerides
-    void eph_impl(double mjd2000, array3D &r, array3D &v) const
+    void eph_impl(double mjd2000, array3D &r, array3D &v) const override
     {
         if (boost::python::override f = this->get_override("eph_impl")) {
 #if BOOST_WORKAROUND(BOOST_MSVC, <= 1700)

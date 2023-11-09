@@ -11,7 +11,15 @@ URL = 'https://github.com/esa/pykep'
 AUTHOR = 'Dario Izzo'
 AUTHOR_EMAIL = 'dario.izzo@gmail.com'
 LICENSE = 'GPLv3+/LGPL3+'
-INSTALL_REQUIRES = ['numpy', 'scipy', 'matplotlib']
+INSTALL_REQUIRES = [
+    'numba',
+    'numpy',
+    'matplotlib',
+    'pygmo',
+    'pygmo_plugins_nonfree',
+    'scipy',
+    'sklearn',
+]
 CLASSIFIERS = [
     # How mature is this project? Common values are
     #   3 - Alpha
@@ -43,25 +51,27 @@ class BinaryDistribution(Distribution):
         return True
 
 
-# Setup the list of external dlls.
+# Setup the list of external dlls and other data files.
 import os.path
+
+PYKEP_UTIL_FILES = ['gravity_models/*/*txt']
 if os.name == 'nt':
     mingw_wheel_libs = 'mingw_wheel_libs_python{}{}.txt'.format(
         sys.version_info[0], sys.version_info[1])
     l = open(mingw_wheel_libs, 'r').readlines()
     DLL_LIST = [os.path.basename(_[:-1]) for _ in l]
     PACKAGE_DATA = {
-          'pykep.core': ['_core.pyd'] + DLL_LIST,
-          'pykep.planet': ['_planet.pyd'],
-          'pykep.sims_flanagan': ['_sims_flanagan.pyd'],
-          'pykep.util': ['_util.pyd']
+          'pykep.core': ['core.pyd'] + DLL_LIST,
+          'pykep.planet': ['planet.pyd'],
+          'pykep.sims_flanagan': ['sims_flanagan.pyd'],
+          'pykep.util': ['util.pyd'] + PYKEP_UTIL_FILES
       }
 else:
     PACKAGE_DATA = {
-          'pykep.core': ['_core.so'],
-          'pykep.planet': ['_planet.so'],
-          'pykep.sims_flanagan': ['_sims_flanagan.so'],
-          'pykep.util': ['_util.so']
+          'pykep.core': ['core.so'],
+          'pykep.planet': ['planet.so'],
+          'pykep.sims_flanagan': ['sims_flanagan.so'],
+          'pykep.util': ['util.so'] + PYKEP_UTIL_FILES
       }
 
 setup(name=NAME,

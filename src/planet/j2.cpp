@@ -27,12 +27,12 @@
 #include <boost/math/constants/constants.hpp>
 #include <boost/none.hpp>
 
-#include "../core_functions/convert_anomalies.h"
-#include "../core_functions/ic2par.h"
-#include "../core_functions/par2ic.h"
-#include "../core_functions/propagate_lagrangian.h"
-#include "../exceptions.h"
-#include "j2.h"
+#include <keplerian_toolbox/core_functions/convert_anomalies.hpp>
+#include <keplerian_toolbox/core_functions/ic2par.hpp>
+#include <keplerian_toolbox/core_functions/par2ic.hpp>
+#include <keplerian_toolbox/core_functions/propagate_lagrangian.hpp>
+#include <keplerian_toolbox/exceptions.hpp>
+#include <keplerian_toolbox/planet/j2.hpp>
 
 namespace kep_toolbox
 {
@@ -164,7 +164,7 @@ void j2::set_ref_mjd2000(const double &when)
     m_ref_mjd2000 = when;
 }
 
-/// Extra informations streamed in humar readable format
+/// Extra informations streamed in human readable format
 std::string j2::human_readable_extra() const
 {
     std::ostringstream s;
@@ -189,4 +189,4 @@ std::string j2::human_readable_extra() const
 }
 }
 
-BOOST_CLASS_EXPORT_IMPLEMENT(kep_toolbox::planet::j2);
+BOOST_CLASS_EXPORT_IMPLEMENT(kep_toolbox::planet::j2)

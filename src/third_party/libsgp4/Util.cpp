@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "Util.h"
+#include <keplerian_toolbox/third_party/libsgp4/Util.h>
 
 #include <algorithm>
 #include <functional>
@@ -24,11 +24,13 @@ namespace Util
 {
 namespace
 {
-struct IsDigit : std::unary_function<char, bool> {
+struct IsDigit {
     bool operator()(char c) const
     {
         return std::isdigit(c, std::locale::classic()) == 0;
     }
+    using argument_type	= char;
+    using result_type = bool;
 };
 }
 

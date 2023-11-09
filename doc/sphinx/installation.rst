@@ -1,68 +1,160 @@
 .. _howtoinstall:
 
-Install pykep
+Installation
 ======================
 
-pykep supports 32 and 64 bits architectures and python 3.X. Python 2.7 support was dropped as of version 2.4.
-Both PyPi and conda package mangers contain the binaries for pykep latest code, but only for a limited set of
-architectures. In case yours is not include, you will have to compile the code from source.
+Dependencies
+------------
+
+pykep has the following **mandatory** runtime dependencies:
+
+* `Python <https://www.python.org/>`__ 3.4 or later (Python 2.x is
+  **not** supported),
+* the `keplerian_toolbox C++ library <https://esa.github.io/pykep/>`__, same version as pykep included in the pykep source,
+* the `Boost serialization library <https://www.boost.org/doc/libs/release/libs/serialization/doc/index.html>`__,
+  version 1.60 or later,
+
+Additionally, pykep has the following **optional** runtime
+dependencies:
+
+* `scipy <https://www.scipy.org/>`__, which is used in many plotting and related utilities.
+* `Matplotlib <https://matplotlib.org/>`__, which is used in many plotting and related utilities.
+  plotting utilities,
+* `scikit-learn <https://scikit-learn.org/stable//>`__, which is used, for example, in the phasing module
+* `numba <http://numba.pydata.org/>`__, which is used to speed up some pure python code.
 
 
-Using Binaries (encouraged whenever possible)
-----------------------------------------------
+Packages
+--------
 
-If you have a compatible architecture you can install pykep via pip/conda typing::
+pykep packages are available from a variety
+of package managers on several platforms.
 
-  pip install pykep
+Conda
+^^^^^
 
-or, if you are using conda::
+pykep is available via the `conda <https://conda.io/docs/>`__
+package manager for Linux, OSX and Windows
+thanks to the infrastructure provided by `conda-forge <https://conda-forge.org/>`__.
+In order to install pykep via conda, you just need to add ``conda-forge``
+to the channels, and then you can immediately install pykep:
 
-  conda install pykep
+.. code-block:: console
 
-In case both fail, you probably do not have an architecture which we support binaries for.
+   $ conda config --add channels conda-forge
+   $ conda config --set channel_priority strict
+   $ conda install pykep
 
-Compiling and Installing under Linux (degree of pain: low)
-------------------------------------------------------------------
+The conda packages for pykep are maintained by the core development team,
+and they are regularly updated when new pykep versions are released.
 
-Assuming you have prepared your system for compiling pykep (see :ref:`prepareyoursystem`) and that you have just downloaded the source code
-following the instructions given, see :ref:`howtodownload`, you will have created a directory keptoolbox in your current directory, 
-move there::
+Please refer to the `conda documentation <https://conda.io/docs/>`__
+for instructions on how to setup and manage
+your conda installation.
 
-  cd pykep
+pip
+^^^
 
-You will now need to create a build directory where to build the source code, so::
+pykep is also available on Linux via the `pip <https://pip.pypa.io/en/stable/>`__
+package installer. The installation of pykep with pip is straightforward:
 
-  mkdir build
+.. code-block:: console
 
-You can now move there::
+   $ pip install pykep
 
-  cd build
+If you want to install pykep for a single user instead of
+system-wide, which is in general a good idea, you can do:
 
-and have ccmake help you select the options that are most suitable for you::
+.. code-block:: console
 
-  ccmake ../
+   $ pip install --user pykep
 
-At this point (after pressing c once to configure and having selected the correct options) you should be seeing something like this on the screen:
+An even better idea is to make use of Python's
+`virtual environments <https://virtualenv.pypa.io/en/latest/>`__.
 
-.. image:: images/ccmake.png
+The pip packages for pykep are maintained by the core development team,
+and they are regularly updated when new pykep versions are released.
 
-Note that in the case above only the tests are built, not the python module nor the headers will be installed. Also note that the 
-```CMAKE_INSTALL_PREFIX``` points to the ```.local``` folder of the user. 
-This correspond to a (suggested) local installation of **pykep**.
+.. warning::
 
-You can now press 'g' to generate a make file and exit ccmake utility. 
-You are back to the prompt where you can now type::
+   Note however that we **strongly** encourage users to install pykep with conda
+   rather than with pip. The reason is that pykep is built on a
+   moderately complicated
+   stack of C++ libraries, which have to be bundled together with pykep
+   in the pip package.
+   This is a problem if one uses pykep together with other Python
+   packages sharing dependencies with pykep, because multiple incompatible
+   versions of the same C++ library might end up being loaded at the
+   same time, leading to crashes and erratic runtime behaviour.
+   The conda packages do not suffer from this issue.
 
-  make
+Installation from source
+------------------------
 
-and::
+In order to install pygmo from source, you will need:
 
-  sudo make install
+* a C++11 capable compiler (any recent version of GCC,
+  Clang or MSVC should do),
+* a `Python <https://www.python.org/>`__ installation,
+* the `Boost libraries <https://www.boost.org/>`__,
+* `CMake <https://cmake.org/>`__, version 3.3 or later.
 
-Watch carefully the message in the terminal where the installation path is given to check
-that the correct python dist-packages or site-packages directory has been located
+After making sure the above dependencies are installed on your system, you can
+download the pykep source code from the
+`GitHub release page <https://github.com/esa/pykep/releases>`__. Alternatively,
+and if you like living on the bleeding edge, you can get the very latest
+version of pykep via ``git``:
 
-Here is a typical example of the output obtained::
+.. code-block:: console
+
+   $ git clone https://github.com/esa/pykep.git
+
+We follow the usual PR-based development workflow, thus pykep's ``master``
+branch is normally kept in a working state.
+
+After downloading and/or unpacking pykep's
+source code, go to pykep's
+source tree, create a ``build`` directory and ``cd`` into it. E.g.,
+on a Unix-like system:
+
+.. code-block:: console
+
+   $ cd /path/to/pykep
+   $ mkdir build
+   $ cd build
+
+Once you are in the ``build`` directory, you must configure your build
+using ``cmake``. There are various useful CMake variables you can set,
+such as:
+
+* ``CMAKE_BUILD_TYPE``: the build type (``Release``, ``Debug``, etc.),
+  defaults to ``Release``.
+* ``CMAKE_INSTALL_PREFIX``: the path into which pygmo will be installed
+  (e.g., this defaults to ``/usr/local`` on Unix-like platforms).
+* ``CMAKE_PREFIX_PATH``: additional paths that will be searched by CMake
+  when looking for dependencies.
+
+Please consult `CMake's documentation <https://cmake.org/cmake/help/latest/>`_
+for more details about CMake's variables and options.
+
+Before compiling pykep we need to install the keplerian toolbox, that is the C++
+code at the heart of most computationally expensive routines. In a linux installation,
+this would typically look like:
+
+.. code-block:: console
+
+    $ cmake -DBoost_NO_BOOST_CMAKE=ON \
+        -DPYKEP_BUILD_KEP_TOOLBOX=yes \
+        -DPYKEP_BUILD_PYKEP=no \
+        -DPYKEP_BUILD_SPICE=yes \
+        -DPYKEP_BUILD_TESTS=yes \
+        -DCMAKE_INSTALL_PREFIX=~/.local \
+        -DCMAKE_PREFIX_PATH=~/.local \
+        -DCMAKE_BUILD_TYPE=Release \
+        ../;
+    $ cmake  --build . --target install
+ 
+Here is a typical example of the output you should expect::
 
   [ 99%] Built target propagate_lagrangian_u_test
   [ 99%] Built target anomalies_test
@@ -76,11 +168,13 @@ Here is a typical example of the output obtained::
   Install the project...
   -- Install configuration: "Release"
 
-You can run the tests now typing::
+You can also run the C++ tests typing:
 
-  make test
+.. code-block:: console
 
-And you should see something like::
+     $ make test
+
+And see, hopefully, something like the following output::
 
   Running tests...
   Test project /home/dario/Develop/pykep/build
@@ -113,58 +207,45 @@ And you should see something like::
 
   Total Test time (real) =   3.24 sec
 
-You can now activate, in ccmake, the build option ```BUILD_PYKEP``` and compile/install the python module, or ```INSTALL_HEADER``` and install the headers.
+You are now ready to compile and install pykep. Move back one level from the folder where you installed the 
+keplerian_toolbox and create a new build directory:
 
-.. note::
+.. code-block:: console
 
-   Check carefully what boost python library is selected automatically by cmake, and if needed change it.
+     $ cd ..
+     $ mkdir build_pykep
+     $ cd build_pykep
 
-Compiling and Installing under Windows (degree of pain: high)
-------------------------------------------------------------------
+There we need to run cmake again with slightly different options:
 
-Unsing minGW things should be roughly the same as under Unix, just make sure that
+.. code-block:: console
 
-* You have compiled the boost libraries correctly (i.e invoking bjam with the option toolset=gcc link=shared).
-* Place the whole boost directory where the CMake script can find it (e.g. in C:/boost). This may also require renaming the folder from boost_x_xx_xx to boost)
-* Check, when running CMake, that all libraries are found correctly
-* When running a make install, Windows will probably put your pykep directory under Program Files/kep_toolbox, move it to the correct place (e.g. C:/PythonXX/Lib/site-packages/)
-* Put all dll (boost and keplerian_toolbox) in pykep/core
-* Hope for the best (kidding its super easy ...)
-* No, really hope for the best
+     $ cmake -DBoost_NO_BOOST_CMAKE=ON \
+         -DPYKEP_BUILD_KEP_TOOLBOX=no \
+         -DPYKEP_BUILD_PYKEP=yes \
+         -DPYKEP_BUILD_TESTS=no \
+         -DCMAKE_INSTALL_PREFIX=~/.local \
+         -DCMAKE_PREFIX_PATH=~/.local \
+         -DCMAKE_BUILD_TYPE=Release \
+         ../;
 
-Systems with multiple python versions
--------------------------------------------------
+Watch carefully the message in the terminal where the installation path is given to check
+that the correct python dist-packages or site-packages directory has been located. If not, 
+set explicitly the relevant cmake variables, for example ```Boost_PYTHON37_LIBRARY_RELEASE``` 
+and ```PYTHON_EXECUTABLE```.
 
-If your system has several versions of python installed check the PYTHON_EXECUTABLE variable in cmake. The libraries, includes and site-packages directory are determined accordingly. If you want to change python version, just define explicitly such a variable. For example (assuming you are in a directory pykep/build)::
+Verifying the installation
+--------------------------
 
-  cmake ../ -DBUILD_PYKEP="ON"  -DPYTHON_EXECUTABLE="/usr/bin/python3.3m"
+You can verify that pykep was successfully compiled and
+installed by running the test suite. From a
+Python session, run the following commands:
 
-It is always good practice to check what cmake has actually located by typing::
+.. code-block:: python
 
-  cmake ../
+   >>> import pykep
+   >>> pykep.test.run_test_suite()
 
-which could look something like::
+If these commands execute without any error, then
+your pykep installation is ready for use.
 
-  -- OS detected: Darwin
-  -- CXX Compiler detected: Clang
-  -- CMake additional search path for libraries: /usr/local/lib
-  -- Enabling '-ftemplate-depth=256' compiler flag required since boost 1.54.
-  -- Enabling '-std=c++11' compiler flag
-  -- CXX compilation flags:  -ftemplate-depth=256 -std=c++11
-  -- Python interpreter: /usr/local/bin/python3
-  -- Python interpreter verison: 3.4
-  -- Python includes path: /usr/local/Cellar/python3/3.4.2_1/Frameworks/Python.framework/Versions/3.4/include/python3.4m
-  -- Python modules install path: /usr/local/Cellar/python3/3.4.2_1/Frameworks/Python.framework/Versions/3.4/lib/python3.4/site-packages
-  -- Python library name: /usr/local/Cellar/python3/3.4.2_1/Frameworks/Python.framework/Versions/3.4/lib/libpython3.4.dylib
-  -- Required Boost libraries: serialization;date_time;python3
-  -- Boost version: 1.57.0
-  -- Found the following Boost libraries:
-  --   serialization
-  --   date_time
-  --   python3
-  -- Detected Boost version: 105700
-  -- Boost include dirs: /usr/local/include
-  -- Boost libraries: /usr/local/lib/libboost_serialization-mt.dylib;/usr/local/lib/libboost_date_time-mt.dylib;/usr/local/lib/libboost_python3-mt.dylib
-  -- Configuring done
-  -- Generating done
-  -- Build files have been written to: /Users/darioizzo/Documents/pykep/build

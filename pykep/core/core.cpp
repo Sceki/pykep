@@ -34,8 +34,8 @@
 #include <cmath>
 #endif
 
-#if PY_MAJOR_VERSION < 2 || (PY_MAJOR_VERSION == 2 && PY_MINOR_VERSION < 6)
-#error Minimum supported Python version is 2.6.
+#if PY_MAJOR_VERSION < 3
+#error Minimum supported Python version is 3.
 #endif
 
 #include <boost/math/constants/constants.hpp>
@@ -53,9 +53,10 @@
 #include <boost/python/self.hpp>
 #include <boost/utility.hpp>
 
-#include "../../src/keplerian_toolbox.h"
 #include "../boost_python_container_conversions.h"
 #include "../utils.h"
+#include "core_docstrings.hpp"
+#include <keplerian_toolbox/keplerian_toolbox.hpp>
 
 using namespace boost::python;
 
@@ -233,12 +234,12 @@ get_constant(G0);
         }                                                                                                              \
     }
 
-#define EXPOSE_CONSTANT(arg) def("_get_" #arg, &get_##arg);
+#define PYKEP_EXPOSE_CONSTANT(arg) def("_get_" #arg, &get_##arg);
 
 typedef std::array<double, 8> array8D;
 typedef std::array<double, 11> array11D;
 
-BOOST_PYTHON_MODULE(_core)
+BOOST_PYTHON_MODULE(core)
 {
     // Disable docstring c++ signature to allow sphinx autodoc to work properly
     docstring_options doc_options;
@@ -257,19 +258,19 @@ BOOST_PYTHON_MODULE(_core)
     PYKEP_REGISTER_CONVERTER(std::vector<array11D>, variable_capacity_policy)
 
     // Expose the astrodynamical constants.
-    EXPOSE_CONSTANT(AU);
-    EXPOSE_CONSTANT(JR);
-    EXPOSE_CONSTANT(MU_SUN);
-    EXPOSE_CONSTANT(MU_EARTH);
-    EXPOSE_CONSTANT(EARTH_VELOCITY);
-    EXPOSE_CONSTANT(EARTH_J2);
-    EXPOSE_CONSTANT(EARTH_RADIUS);
-    EXPOSE_CONSTANT(DEG2RAD);
-    EXPOSE_CONSTANT(RAD2DEG);
-    EXPOSE_CONSTANT(DAY2SEC);
-    EXPOSE_CONSTANT(SEC2DAY);
-    EXPOSE_CONSTANT(DAY2YEAR);
-    EXPOSE_CONSTANT(G0);
+    PYKEP_EXPOSE_CONSTANT(AU);
+    PYKEP_EXPOSE_CONSTANT(JR);
+    PYKEP_EXPOSE_CONSTANT(MU_SUN);
+    PYKEP_EXPOSE_CONSTANT(MU_EARTH);
+    PYKEP_EXPOSE_CONSTANT(EARTH_VELOCITY);
+    PYKEP_EXPOSE_CONSTANT(EARTH_J2);
+    PYKEP_EXPOSE_CONSTANT(EARTH_RADIUS);
+    PYKEP_EXPOSE_CONSTANT(DEG2RAD);
+    PYKEP_EXPOSE_CONSTANT(RAD2DEG);
+    PYKEP_EXPOSE_CONSTANT(DAY2SEC);
+    PYKEP_EXPOSE_CONSTANT(SEC2DAY);
+    PYKEP_EXPOSE_CONSTANT(DAY2YEAR);
+    PYKEP_EXPOSE_CONSTANT(G0);
 
     // Exposing enums
     enum_<kep_toolbox::epoch::type>("_epoch_type", "Defines a julian date type exposing the corresponding c++ enum\n\n"
@@ -282,10 +283,7 @@ BOOST_PYTHON_MODULE(_core)
         .value("JD", kep_toolbox::epoch::JD);
 
     // Epoch class
-    class_<kep_toolbox::epoch>("epoch",
-                               "Represents a precise point in time. The "
-                               "boost::posix_time_ptime classes are used to handle the "
-                               "conversion to and from string",
+    class_<kep_toolbox::epoch>("epoch", pykep::epoch_doc().c_str(),
                                init<optional<const double &, kep_toolbox::epoch::type>>())
         .add_property("jd", &kep_toolbox::epoch::jd,
                       "Returns the Julian Date\n\n"
@@ -303,53 +301,14 @@ BOOST_PYTHON_MODULE(_core)
         .def_pickle(python_class_pickle_suite<kep_toolbox::epoch>());
 
     // Epoch constructors helpers
-    def("epoch_from_string", &kep_toolbox::epoch_from_string,
-        "pykep.epoch_from_string(s)\n\n"
-        "- s: string containing a date in the format 'YYYY-MM-DD HH:MM:SS'"
-        "Returns a :py:class:`pykep.epoch` object constructed from a from a "
-        "delimited string containing a date."
-        "Excess digits in fractional seconds will be dropped. Ex: "
-        "'1:02:03.123456999' => '1:02:03.123456'."
-        "This behavior depends on the precision defined in astro_constant.h used "
-        "to compile.\n\n"
-        "NOTE: The function is based on the corresponding `boost date_time "
-        "library function "
-        "<http://www.boost.org/doc/libs/1_44_0/doc/html/date_time/"
-        "posix_time.html#ptime_from_string>`_\n\n"
-        "Example::\n\n"
-        "  e = pykep.epoch_from_string('2002-01-20 23:59:54.003')");
-
-    def("epoch_from_iso_string", &kep_toolbox::epoch_from_iso_string,
-        "pykep.epoch_from_iso_string(s)\n\n"
-        "- s: string containing a date in the iso format 'YYYYMMDDTHHMMSS'"
-        "Returns a :py:class:`pykep.epoch` object constructed from a from a non "
-        "delimited iso form string containing a date.\n\n"
-        "NOTE: The function is based on the corresponding `boost date_time "
-        "library function "
-        "<http://www.boost.org/doc/libs/1_44_0/doc/html/date_time/"
-        "posix_time.html#ptime_from_string>`_\n\n"
-        "Example::\n\n"
-        "  e = pykep.epoch_from_iso_string('20020120T235954')");
+    def("epoch_from_string", &kep_toolbox::epoch_from_string, pykep::epoch_from_string_doc().c_str());
+    def("epoch_from_iso_string", &kep_toolbox::epoch_from_iso_string, pykep::epoch_from_iso_string_doc().c_str());
 
     // Lambert.
     class_<kep_toolbox::lambert_problem>(
         "lambert_problem", "Represents a multiple revolution Lambert's problem",
         init<const kep_toolbox::array3D &, const kep_toolbox::array3D &, const double &, const double &, const int &,
-             const int &>("lambert_problem(r1 = [1,0,0], r2 = [0,1,0], tof = pi/2, mu = 1., cw = False, max_revs = 0)\n\n"
-                          "- r1: starting position (x1,y1,z1)\n"
-                          "- r2: final position    (x2,y2,z2)\n"
-                          "- tof: time of flight\n"
-                          "- mu: gravitational parameter (default is 1)\n"
-                          "- cw: True for retrograde motion (clockwise), False if "
-                          "counter-clock wise (default is False)\n"
-                          "- max_revs: Maximum number of multirevs to be computed (default "
-                          "is 5)\n\n"
-                          ".. note::\n"
-                          "   Units need to be consistent.\n"
-                          "   The multirev Lambert's problem will be solved upon construction "
-                          "and its solution stored in data members.\n\n"
-                          "Example (non-dimensional units used)::\n\n"
-                          "  l = lambert_problem([1,0,0],[0,1,0],5 * pi / 2. )",
+             const int &>(pykep::lambert_problem_doc().c_str(),
                           (arg("r1") = kep_toolbox::array3D{1, 0, 0}, arg("r2") = kep_toolbox::array3D{0, 1, 0},
                            arg("tof") = boost::math::constants::pi<double>() / 2., arg("mu") = 1., arg("cw") = false,
                            arg("max_revs") = 0)))
@@ -408,37 +367,15 @@ BOOST_PYTHON_MODULE(_core)
         .def_pickle(python_class_pickle_suite<kep_toolbox::lambert_problem>());
 
     // Lagrangian propagator for keplerian orbits
-    def("propagate_lagrangian", &propagate_lagrangian_wrapper,
-        "pykep.propagate_lagrangian(r,v,t,mu)\n\n"
-        "- r: start position, x,y,z\n"
-        "- v: start velocity, vx,vy,vz\n"
-        "- t: propagation time\n"
-        "- mu: central body gravity constant\n\n"
-        "Returns a tuple containing r and v, the final position and velocity "
-        "after the propagation.\n\n"
-        "Example::\n\n"
-        "  r,v = propagate_lagrangian([1,0,0],[0,1,0],pi/2,1)");
+    def("propagate_lagrangian", &propagate_lagrangian_wrapper, pykep::propagate_lagrangian_doc().c_str(),
+        (arg("r0") = kep_toolbox::array3D{1, 0, 0}, arg("v0") = kep_toolbox::array3D{0, 1, 0},
+         arg("tof") = boost::math::constants::pi<double>() / 2, arg("mu") = 1));
 
     // Taylor propagation of inertially constant thrust arcs
-    def("propagate_taylor", &propagate_taylor_wrapper,
-        "pykep.propagate_taylor(r,v,m,thrust,tof,mu,veff,log10tol,log10rtol)\n\n"
-        "- r: start position, x,y,z\n"
-        "- v: start velocity, vx,vy,vz\n"
-        "- m: starting mass\n"
-        "- thrust: fixed inertial thrust, ux,uy,uz\n"
-        "- tof: propagation time\n"
-        "- mu: central body gravity constant\n\n"
-        "- veff: the product (Isp g0) defining the engine efficiency \n\n"
-        "- log10tol: the logarithm of the absolute tolerance passed to taylor "
-        "propagator \n\n"
-        "- log10rtol: the logarithm of the relative tolerance passed to taylor "
-        "propagator \n\n"
-        "Returns a tuple containing r, v, and m the final position, velocity and "
-        "mass after the propagation.\n\n"
-        "Example::\n\n"
-        "  r,v,m = "
-        "propagate_taylor([1,0,0],[0,1,0],100,[0,0,0],pi/2,1,1,-15,-15)",
-        (arg("r"), arg("v"), arg("m"), arg("thrust"), arg("tof"), arg("mu"), arg("veff"), arg("log10tol") = 1e-15,
+    def("propagate_taylor", &propagate_taylor_wrapper, pykep::propagate_taylor_doc().c_str(),
+        (arg("r0") = kep_toolbox::array3D{1, 0, 0}, arg("v0") = arg("v0") = kep_toolbox::array3D{0, 1, 0},
+         arg("m0") = 100, arg("thrust") = kep_toolbox::array3D{0, 0, 0},
+         arg("tof") = boost::math::constants::pi<double>() / 2, arg("mu") = 1, arg("veff") = 1, arg("log10tol") = 1e-15,
          arg("log10rtol") = 1e-15));
 
     // Taylor propagation of inertially constant thrust arcs with an inertially constant disturbance
@@ -580,8 +517,12 @@ BOOST_PYTHON_MODULE(_core)
         "- v: velocity (cartesian)\n"
         "- mu: gravity parameter\n\n"
         "Returns the osculating keplerian elements a,e,i,W,w,E\n"
+        "a is the semi-major axis, always a positive quantity.\n"
+        "e is the eccentricity, non-negative\n"
+        "i is the incliniation\n"
+        "W is the longitude of the ascending node, undefined in an equatorial orbit\n"
+        "w is the argument of perigee, undefined in a circular orbit\n"
         "E is the eccentric anomaly for e<1, the Gudermannian for e>1\n"
-        "a is the semi-major axis always a positive quantity.\n"
         "NOTE: The routine is singular when the elements are not defined.\n"
         "Example:: \n\n"
         "  el = ic2par([1,0,0],[0,1,0],1.0)",
@@ -592,8 +533,12 @@ BOOST_PYTHON_MODULE(_core)
         "- E: osculating keplerian elements a,e,i,W,w,E ( l, ND, rad, rad, rad, rad)\n"
         "- mu: gravity parameter (l^3/s^2)\n\n"
         "Returns cartesian elements from Keplerian elements\n"
+        "a is the semi-major axis, always a positive quantity.\n"
+        "e is the eccentricity, non-negative\n"
+        "i is the incliniation\n"
+        "W is the longitude of the ascending node\n"
+        "w is the argument of perigee\n"
         "E is the eccentric anomaly for e<1, the Gudermannian for e>1\n"
-        "a is the semi-major axis always a positive quantity.\n"
         "Example:: \n\n"
         "  r, v = pk.par2ic([1,0.3,0.1,0.1,0.2,0.2], 1)",
         (arg("E"), arg("mu") = 1.0));

@@ -26,10 +26,10 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/math/constants/constants.hpp>
 
-#include "../core_functions/convert_anomalies.h"
-#include "../core_functions/ic2par.h"
-#include "../exceptions.h"
-#include "base.h"
+#include <keplerian_toolbox/core_functions/convert_anomalies.hpp>
+#include <keplerian_toolbox/core_functions/ic2par.hpp>
+#include <keplerian_toolbox/exceptions.hpp>
+#include <keplerian_toolbox/planet/base.hpp>
 
 namespace kep_toolbox
 {
@@ -118,7 +118,7 @@ double base::compute_period(const epoch &when) const
 double base::get_mu_central_body() const
 {
     return m_mu_central_body;
-};
+}
 
 /// Getter for the planet gravitational parameter
 /**
@@ -129,7 +129,7 @@ double base::get_mu_central_body() const
 double base::get_mu_self() const
 {
     return m_mu_self;
-};
+}
 
 /// Getter for the planet radius
 /**
@@ -140,12 +140,12 @@ double base::get_mu_self() const
 double base::get_radius() const
 {
     return m_radius;
-};
+}
 
 /// Getter for the planet safe-radius
 /**
  * Gets the safe-radius of the planet. This is intended to be the minimum distance
- * from the planet center that is safe ... It may be used, for example,  during fly-bys as a constarint
+ * from the planet center that is safe ... It may be used, for example,  during fly-bys as a constraint
  * on the spacecraft trajectory
  *
  * @return const reference to safe_radius (SI Units)
@@ -153,18 +153,18 @@ double base::get_radius() const
 double base::get_safe_radius() const
 {
     return m_safe_radius;
-};
+}
 
 /// Returns the planet name
 std::string base::get_name() const
 {
     return m_name;
-};
+}
 
 /// Setter for the planet safe-radius
 /**
  * Sets the safe-radius of the planet. This is intended to be the minimum distance
- * from the planet center that is safe ... It is used, for example,  during fly-bys as a constarint
+ * from the planet center that is safe ... It is used, for example,  during fly-bys as a constraint
  * on the spacecraft trajectory
  *
  * \param[in] safe_radius Minimum allowed planetary distance (in planetary radius units)
@@ -176,7 +176,7 @@ void base::set_safe_radius(double sr)
         throw_value_error("Trying to set a safe_radius that is smaller than the planetary radius");
     }
     m_safe_radius = sr * get_radius();
-};
+}
 
 /// Setter for the central body gravity parameter
 /**

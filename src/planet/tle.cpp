@@ -26,16 +26,16 @@
 #include <cmath>
 #include <string>
 
-#include "../core_functions/convert_anomalies.h"
-#include "../core_functions/par2ic.h"
-#include "../exceptions.h"
-#include "../third_party/libsgp4/Eci.h"
-#include "../third_party/libsgp4/Globals.h"
-#include "../third_party/libsgp4/SGP4.h"
-#include "../third_party/libsgp4/SatelliteException.h"
-#include "../third_party/libsgp4/Tle.h"
-#include "../third_party/libsgp4/TleException.h"
-#include "tle.h"
+#include <keplerian_toolbox/core_functions/convert_anomalies.hpp>
+#include <keplerian_toolbox/core_functions/par2ic.hpp>
+#include <keplerian_toolbox/exceptions.hpp>
+#include <keplerian_toolbox/planet/tle.hpp>
+#include <keplerian_toolbox/third_party/libsgp4/Eci.h>
+#include <keplerian_toolbox/third_party/libsgp4/Globals.h>
+#include <keplerian_toolbox/third_party/libsgp4/SGP4.h>
+#include <keplerian_toolbox/third_party/libsgp4/SatelliteException.h>
+#include <keplerian_toolbox/third_party/libsgp4/Tle.h>
+#include <keplerian_toolbox/third_party/libsgp4/TleException.h>
 
 namespace kep_toolbox
 {
@@ -47,12 +47,14 @@ namespace planet
  * \param[in] line1 first line
  * \param[in] line2 second line
  */
-tle::tle(const std::string &line1, const std::string &line2) try : base(),
-                                                                   m_line1(line1),
-                                                                   m_line2(line2),
-                                                                   m_tle(Tle("TLE satellite", line1, line2)),
-                                                                   m_sgp4_propagator(SGP4(m_tle)) {
+tle::tle(const std::string &line1, const std::string &line2)
+try : base(),
+      m_line1(line1),
+      m_line2(line2),
+      m_tle(Tle("TLE satellite", line1, line2)),
+      m_sgp4_propagator(SGP4(m_tle)) {
     // We read the osculating elements of the satellite
+
     array6D keplerian_elements;
     double mu_central_body = kMU * 1E09;                                                     // (m^3/s^2)
     double mean_motion = m_tle.MeanMotion() * 2 * kPI / kSECONDS_PER_DAY;                    // [rad/s]
@@ -64,8 +66,17 @@ tle::tle(const std::string &line1, const std::string &line2) try : base(),
     keplerian_elements[5] = m_tle.MeanAnomaly(false);                                        // M [rad]
 
     std::string year_str = m_tle.IntDesignator().substr(0, 2);
-    int year_int = std::stoi(year_str);
     std::string rest = m_tle.IntDesignator().substr(2);
+    int year_int;
+    // Object that have no ID assigned yet will have an empty year_str
+    try { 
+        year_int = std::stoi(year_str);
+    } catch(...) {
+        year_int = -1;
+        year_str = "xx";
+        rest = "TO BE ASSIGNED";
+    }
+
     int prefix = (year_int > 56) ? (19) : (20);
 
     std::string object_name(std::to_string(prefix) + year_str + std::string("-") + rest);
@@ -138,7 +149,7 @@ void tle::set_epoch(const unsigned int year, const double day)
     m_ref_mjd2000 = epoch(m_tle.Epoch().ToJulian(), epoch::JD).mjd2000();
 }
 
-/// Extra informations streamed in human readable format
+/// Extra information streamed in human readable format
 std::string tle::human_readable_extra() const
 {
     std::ostringstream s;
@@ -148,7 +159,7 @@ std::string tle::human_readable_extra() const
     s << "TLE 2: " << m_line2 << std::endl;
     return s.str();
 }
-}
-} // namespace
+} // namespace planet
+} // namespace kep_toolbox
 
 BOOST_CLASS_EXPORT_IMPLEMENT(kep_toolbox::planet::tle)
